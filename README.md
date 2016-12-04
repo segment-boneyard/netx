@@ -1,4 +1,4 @@
-netx
+netx [![CircleCI](https://circleci.com/gh/segmentio/netx.svg?style=shield)](https://circleci.com/gh/segmentio/netx) [![Go Report Card](https://goreportcard.com/badge/github.com/segmentio/netx)](https://goreportcard.com/report/github.com/segmentio/netx) [![GoDoc](https://godoc.org/github.com/segmentio/netx?status.svg)](https://godoc.org/github.com/segmentio/netx)
 ====
 
 Go package augmenting the standard net package with more basic building blocks
