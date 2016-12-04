@@ -9,8 +9,8 @@ import (
 // Listen is equivalent to net.Listen but guesses the network from the address.
 //
 // The function accepts addresses that may be prefixed by a URL scheme to set
-// the protocol that will be used, supported protocols are tcp, tcp4, tcp6, udp,
-// udp4, udp6, unix, and unixpacket.
+// the protocol that will be used, supported protocols are tcp, tcp4, tcp6,
+// unix, and unixpacket.
 //
 // The address may contain a path to a file for unix sockets, a pair of an IP
 // address and port, a pair of a network interface name and port, or just port.
@@ -29,9 +29,6 @@ func Listen(address string) (lstn net.Listener, err error) {
 			"tcp4",
 			"tcp6",
 			"tcp",
-			"udp4",
-			"udp6",
-			"udp",
 			"unixpacket",
 			"unix",
 		} {
