@@ -19,19 +19,63 @@ import (
 // one automatically.
 func Listen(address string) (lstn net.Listener, err error) {
 	var network string
+	var addrs []string
+
+	if network, addrs, err = resolveListen(address, "tcp", "unix", []string{
+		"tcp4",
+		"tcp6",
+		"tcp",
+		"unixpacket",
+		"unix",
+	}); err != nil {
+		return
+	}
+
+	// TOOD: listen on all addresses?
+	for _, address := range addrs {
+		if lstn, err = net.Listen(network, address); err == nil {
+			break
+		}
+	}
+
+	return
+}
+
+// ListenPacket is similar to Listen but returns a PacketConn, nad works with
+// udp, ip, or unixdgram protocols.
+func ListenPacket(address string) (conn net.PacketConn, err error) {
+	var network string
+	var addrs []string
+
+	if network, addrs, err = resolveListen(address, "udp", "unixdgram", []string{
+		"udp4",
+		"udp6",
+		"udp",
+		"ip4",
+		"ip6",
+		"ip",
+		"unixdgram",
+	}); err != nil {
+		return
+	}
+
+	// TODO: listen on all addresses?
+	for _, address := range addrs {
+		if conn, err = net.ListenPacket(network, address); err == nil {
+			break
+		}
+	}
+
+	return
+}
+
+func resolveListen(address string, defaultProtoNetwork string, defaultProtoUnix string, protocols []string) (network string, addrs []string, err error) {
 	var host string
 	var port string
 	var ifi *net.Interface
-	var addrs = make([]string, 0, 10)
 
 	if off := strings.Index(address, "://"); off >= 0 {
-		for _, proto := range [...]string{
-			"tcp4",
-			"tcp6",
-			"tcp",
-			"unixpacket",
-			"unix",
-		} {
+		for _, proto := range protocols {
 			if strings.HasPrefix(address, proto+"://") {
 				network, address = proto, address[len(proto)+3:]
 				break
@@ -61,7 +105,7 @@ func Listen(address string) (lstn net.Listener, err error) {
 		addrs = append(addrs, address)
 
 		if len(network) == 0 {
-			network = "tcp"
+			network = defaultProtoNetwork
 		}
 
 	} else if ifi, err = net.InterfaceByName(host); err == nil {
@@ -82,7 +126,7 @@ func Listen(address string) (lstn net.Listener, err error) {
 		}
 
 		if len(network) == 0 {
-			network = "tcp"
+			network = defaultProtoNetwork
 		}
 
 	} else {
@@ -91,14 +135,7 @@ func Listen(address string) (lstn net.Listener, err error) {
 		addrs = append(addrs, address)
 
 		if len(network) == 0 {
-			network = "unix"
-		}
-	}
-
-	// TOOD: listen on all addresses?
-	for _, address := range addrs {
-		if lstn, err = net.Listen(network, address); err == nil {
-			break
+			network = defaultProtoUnix
 		}
 	}
 
