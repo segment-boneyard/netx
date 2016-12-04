@@ -9,6 +9,24 @@ import (
 	"time"
 )
 
+// ListenAndServe listens on the address addr and then call Serve to handle
+// the incoming connections.
+func ListenAndServe(addr string, handler Handler) error {
+	return (&Server{
+		Addr:    addr,
+		Handler: handler,
+	}).ListenAndServe()
+}
+
+// Serve accepts incoming connections on the Listener lstn, creating a new
+// service goroutine for each. The service goroutines simply invoke the
+// handler's ServeConn method.
+func Serve(lstn net.Listener, handler Handler) error {
+	return (&Server{
+		Handler: handler,
+	}).Serve(lstn)
+}
+
 // A Handler manages a network connection.
 //
 // The ServeConn method is called by a Server when a new client connection is
@@ -38,6 +56,8 @@ type Server struct {
 	ErrorLog *log.Logger // the logger used to output internal errors
 }
 
+// ListenAndServe listens on the server address and then call Serve to handle
+// the incoming connections.
 func (s *Server) ListenAndServe() (err error) {
 	var lstn net.Listener
 
@@ -48,6 +68,9 @@ func (s *Server) ListenAndServe() (err error) {
 	return
 }
 
+// Serve accepts incoming connections on the Listener lstn, creating a new
+// service goroutine for each. The service goroutines simply invoke the
+// handler's ServeConn method.
 func (s *Server) Serve(lstn net.Listener) (err error) {
 	defer lstn.Close()
 
