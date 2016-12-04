@@ -36,7 +36,7 @@ func Serve(lstn net.Listener, handler Handler) error {
 // Servers recover from panics that escape the handlers and log the error and
 // stack trace.
 type Handler interface {
-	ServeConn(conn net.Conn, context context.Context)
+	ServeConn(conn net.Conn, ctx context.Context)
 }
 
 // The HandlerFunc type allows simple functions to be used as connection
@@ -51,9 +51,10 @@ func (f HandlerFunc) ServeConn(conn net.Conn) {
 // A Server defines parameters for running servers that accept connections over
 // TCP or unix domains.
 type Server struct {
-	Addr     string      // address to listen on
-	Handler  Handler     // handler to invoke on new connections
-	ErrorLog *log.Logger // the logger used to output internal errors
+	Addr     string          // address to listen on
+	Handler  Handler         // handler to invoke on new connections
+	ErrorLog *log.Logger     // the logger used to output internal errors
+	Context  context.Context // the base context used by the server
 }
 
 // ListenAndServe listens on the server address and then call Serve to handle
@@ -77,7 +78,7 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 	join := &sync.WaitGroup{}
 	defer join.Wait()
 
-	context, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.context())
 	defer cancel()
 
 	errf := func(err error, backoff time.Duration) {
@@ -92,19 +93,24 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 		}
 
 		join.Add(1)
-		go s.serve(conn, context, join)
+		go s.serve(conn, ctx, join)
 	}
 }
 
-func (s *Server) serve(conn net.Conn, context context.Context, join *sync.WaitGroup) {
+func (s *Server) serve(conn net.Conn, ctx context.Context, join *sync.WaitGroup) {
 	defer func(addr string) {
 		if err := recover(); err != nil {
 			s.recover(err, addr)
 		}
 	}(conn.RemoteAddr().String())
+
 	defer join.Done()
 	defer conn.Close()
-	s.Handler.ServeConn(conn, context)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	s.Handler.ServeConn(conn, ctx)
 }
 
 func (s *Server) recover(err interface{}, addr string) {
@@ -121,4 +127,12 @@ func (s *Server) logf(format string, args ...interface{}) {
 	} else {
 		s.ErrorLog.Printf(format, args...)
 	}
+}
+
+func (s *Server) context() context.Context {
+	ctx := s.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return ctx
 }
