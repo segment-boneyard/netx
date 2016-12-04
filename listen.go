@@ -22,11 +22,11 @@ func Listen(address string) (lstn net.Listener, err error) {
 	var addrs []string
 
 	if network, addrs, err = resolveListen(address, "tcp", "unix", []string{
+		"tcp",
 		"tcp4",
 		"tcp6",
-		"tcp",
-		"unixpacket",
 		"unix",
+		"unixpacket",
 	}); err != nil {
 		return
 	}
@@ -37,23 +37,22 @@ func Listen(address string) (lstn net.Listener, err error) {
 			break
 		}
 	}
-
 	return
 }
 
 // ListenPacket is similar to Listen but returns a PacketConn, nad works with
-// udp, ip, or unixdgram protocols.
+// udp, udp4, udp6, ip, ip4, ip6, or unixdgram protocols.
 func ListenPacket(address string) (conn net.PacketConn, err error) {
 	var network string
 	var addrs []string
 
 	if network, addrs, err = resolveListen(address, "udp", "unixdgram", []string{
+		"udp",
 		"udp4",
 		"udp6",
-		"udp",
+		"ip",
 		"ip4",
 		"ip6",
-		"ip",
 		"unixdgram",
 	}); err != nil {
 		return
@@ -65,7 +64,6 @@ func ListenPacket(address string) (conn net.PacketConn, err error) {
 			break
 		}
 	}
-
 	return
 }
 
