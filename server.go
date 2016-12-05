@@ -36,16 +36,16 @@ func Serve(lstn net.Listener, handler Handler) error {
 // Servers recover from panics that escape the handlers and log the error and
 // stack trace.
 type Handler interface {
-	ServeConn(conn net.Conn, ctx context.Context)
+	ServeConn(ctx context.Context, conn net.Conn)
 }
 
 // The HandlerFunc type allows simple functions to be used as connection
 // handlers.
-type HandlerFunc func(net.Conn)
+type HandlerFunc func(context.Context, net.Conn)
 
 // ServeConn calls f.
-func (f HandlerFunc) ServeConn(conn net.Conn) {
-	f(conn)
+func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
+	f(ctx, conn)
 }
 
 // A Server defines parameters for running servers that accept connections over
@@ -93,11 +93,11 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 		}
 
 		join.Add(1)
-		go s.serve(conn, ctx, join)
+		go s.serve(ctx, conn, join)
 	}
 }
 
-func (s *Server) serve(conn net.Conn, ctx context.Context, join *sync.WaitGroup) {
+func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup) {
 	defer func(addr string) {
 		if err := recover(); err != nil {
 			s.recover(err, addr)
@@ -110,7 +110,7 @@ func (s *Server) serve(conn net.Conn, ctx context.Context, join *sync.WaitGroup)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	s.Handler.ServeConn(conn, ctx)
+	s.Handler.ServeConn(ctx, conn)
 }
 
 func (s *Server) recover(err interface{}, addr string) {
