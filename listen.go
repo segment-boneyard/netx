@@ -143,6 +143,7 @@ func resolveListen(address string, defaultProtoNetwork string, defaultProtoUnix 
 		}
 
 	} else {
+		err = nil
 		// Neither an IP address nor a network interface name was passed, we
 		// assume this address is probably the path to a unix domain socket.
 		addrs = append(addrs, address)

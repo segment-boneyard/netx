@@ -2,6 +2,7 @@ package netx
 
 import (
 	"context"
+	"io"
 	"log"
 	"net"
 	"runtime"
@@ -48,6 +49,19 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 	f(ctx, conn)
 }
 
+// Echo is the implementation of a connection handler that simply sends what it
+// receives back to the client.
+type Echo struct{}
+
+// Satisfies the Handler interface.
+func (e Echo) ServeConn(ctx context.Context, conn net.Conn) {
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+	}()
+	io.Copy(conn, conn)
+}
+
 // A Server defines parameters for running servers that accept connections over
 // TCP or unix domains.
 type Server struct {
@@ -78,7 +92,13 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 	join := &sync.WaitGroup{}
 	defer join.Wait()
 
-	ctx, cancel := context.WithCancel(s.context())
+	ctx := s.context()
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		lstn.Close()
+	}(ctx)
+
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	errf := func(err error, backoff time.Duration) {
