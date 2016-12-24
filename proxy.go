@@ -44,10 +44,19 @@ type Proxy struct {
 
 // ServeConn satisfies the Handler interface.
 func (p *Proxy) ServeConn(ctx context.Context, conn net.Conn) {
-	if target, err := OriginalTargetAddr(conn); err == nil {
-		p.Handler.ServeProxy(ctx, conn, target)
-	} else if p.ErrorLog != nil {
-		p.ErrorLog.Printf("proxy: %s->%s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+	target, err := OriginalTargetAddr(conn)
+
+	if err != nil {
+		p.logf("proxy: %s->%s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+		return
+	}
+
+	p.Handler.ServeProxy(ctx, conn, target)
+}
+
+func (p *Proxy) logf(fmt string, args ...interface{}) {
+	if log := p.ErrorLog; log != nil {
+		log.Printf(fmt, args...)
 	}
 }
 
