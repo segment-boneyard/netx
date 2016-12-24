@@ -33,7 +33,7 @@ func (f TunnelHandlerFunc) ServeTunnel(ctx context.Context, from net.Conn, to ne
 type Tunnel struct {
 	// Network and Address of the target.
 	//
-	// This fields are optional if the tunnel's ServeConn method is never
+	// These fields are optional if the tunnel's ServeConn method is never
 	// called.
 	Network string
 	Address string
