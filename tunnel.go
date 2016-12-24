@@ -1,9 +1,12 @@
 package netx
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"log"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -67,7 +70,7 @@ func (t *Tunnel) ServeConn(ctx context.Context, from net.Conn) {
 func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr) {
 	dial := t.DialContext
 
-	if dial != nil {
+	if dial == nil {
 		dial = (&net.Dialer{Timeout: 1 * time.Minute /* safeguard */}).DialContext
 	}
 
@@ -98,3 +101,34 @@ func (a *TunnelAddr) Network() string { return a.Net }
 
 // String returns a.Addr
 func (a *TunnelAddr) String() string { return a.Addr }
+
+// TunnelForwarder is a TunnelHandler that simply passes bytes between the two
+// ends of a tunnel.
+type TunnelForwarder struct{}
+
+// ServeTunnel satisfies the TunnelHandler interface.
+func (t *TunnelForwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn) {
+	defer from.Close()
+	defer to.Close()
+
+	join := &sync.WaitGroup{}
+	join.Add(2)
+
+	go t.forward(from, to, join)
+	go t.forward(to, from, join)
+
+	<-ctx.Done()
+}
+
+func (t *TunnelForwarder) forward(from net.Conn, to net.Conn, join *sync.WaitGroup) {
+	defer join.Done()
+	defer to.Close()
+
+	buf := buffers.Get().(*bytes.Buffer)
+	io.CopyBuffer(to, from, buf.Bytes())
+	buffers.Put(buf)
+}
+
+var buffers = sync.Pool{
+	New: func() interface{} { return bytes.NewBuffer(make([]byte, 16384, 16384)) },
+}

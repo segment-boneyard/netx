@@ -3,7 +3,9 @@ package netx
 import (
 	"context"
 	"io"
+	"log"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -77,4 +79,21 @@ func TestEchoServer(t *testing.T) {
 			done.Wait()
 		})
 	}
+}
+
+func listenAndServe(h Handler) (net string, addr string, close func()) {
+	lstn, err := Listen("127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go (&Server{
+		Handler:  h,
+		Context:  ctx,
+		ErrorLog: log.New(os.Stderr, "listen: ", 0),
+	}).Serve(lstn)
+
+	net, addr, close = lstn.Addr().Network(), lstn.Addr().String(), cancel
+	return
 }
