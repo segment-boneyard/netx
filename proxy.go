@@ -40,9 +40,7 @@ type Proxy struct {
 }
 
 // CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a proxy can be used as a fallback protocol in a ProtoMux to simply
-// forward the bytes back and forth if the connection is using an unsupported
-// protocol.
+// that a proxy can be used as a fallback protocol in a ProtoMux.
 func (p *Proxy) CanRead(b []byte) bool {
 	return true
 }

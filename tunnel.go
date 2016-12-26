@@ -7,7 +7,7 @@ import (
 )
 
 // TunnelHandler is an interface that must be implemented by types that intend
-// to provide a tunnel connection logic.
+// to provide logic for tunnelling connections.
 //
 // The ServeTunnel method is called by a Tunnel after establishing a connection
 // to a remote target address.
@@ -39,9 +39,7 @@ type Tunnel struct {
 }
 
 // CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a tunnel can be used as a fallback protocol in a ProxyProtoMux to simply
-// forward the bytes back and forth if the connection is using an unsupported
-// protocol.
+// that a tunnel can be used as a fallback protocol in a ProxyProtoMux.
 func (t *Tunnel) CanRead(b []byte) bool {
 	return true
 }

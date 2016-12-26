@@ -8,14 +8,13 @@ import (
 	"sync"
 )
 
-// Forwarder is a TunnelHandler that simply passes bytes between the two
-// ends of a tunnel.
+// Forwarder is a tunnel handler that simply passes bytes between the two ends
+// of a tunnel.
 type Forwarder struct{}
 
 // CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a tunnel can be used as a fallback protocol in a TunnelProtoMux to simply
-// forward the bytes back and forth if the connection is using an unsupported
-// protocol.
+// that a forwarder can be used as a fallback protocol in a TunnelProtoMux to
+// simply pass the bytes back and forth.
 func (t *Forwarder) CanRead(b []byte) bool {
 	return true
 }
