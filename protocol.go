@@ -118,7 +118,9 @@ func (mux *TunnelProtoMux) ServeTunnel(ctx context.Context, from net.Conn, to ne
 	var err error
 
 	if mux.ReadTimeout != 0 {
-		ctx, _ = context.WithTimeout(ctx, mux.ReadTimeout)
+		newCtx, cancel := context.WithTimeout(ctx, mux.ReadTimeout)
+		defer cancel()
+		ctx = newCtx
 	}
 
 	// We're not sure which side of the connection is going to emit data first,
@@ -161,7 +163,9 @@ func (mux *TunnelProtoMux) ServeTunnel(ctx context.Context, from net.Conn, to ne
 
 func peekContextTimeout(ctx context.Context, conn net.Conn, timeout time.Duration) (net.Conn, []byte, error) {
 	if timeout != 0 {
-		ctx, _ = context.WithTimeout(ctx, timeout)
+		newCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		ctx = newCtx
 	}
 	return peekContext(ctx, conn)
 }
