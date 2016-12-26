@@ -2,9 +2,7 @@ package netx
 
 import (
 	"io"
-	"log"
 	"net"
-	"os"
 	"testing"
 )
 
@@ -12,11 +10,12 @@ func TestTunnel(t *testing.T) {
 	net1, addr1, close1 := listenAndServe(&Echo{})
 	defer close1()
 
-	net2, addr2, close2 := listenAndServe(&Tunnel{
-		Network:  net1,
-		Address:  addr1,
-		ErrorLog: log.New(os.Stderr, "", 0),
-		Handler:  &TunnelForwarder{},
+	net2, addr2, close2 := listenAndServe(&Proxy{
+		Network: net1,
+		Address: addr1,
+		Handler: &Tunnel{
+			Handler: &Forwarder{},
+		},
 	})
 	defer close2()
 
@@ -41,5 +40,6 @@ func TestTunnel(t *testing.T) {
 
 	if s := string(b[:]); s != "Hello World!" {
 		t.Error(s)
+		return
 	}
 }

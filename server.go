@@ -119,8 +119,18 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 
 func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup) {
 	defer func(addr string) {
-		if err := recover(); err != nil {
-			s.recover(err, addr)
+		err := recover()
+		if err == nil {
+			return
+		}
+		if err, ok := err.(error); ok {
+			s.logf("error serving %v: %v", addr, err)
+		} else {
+			// Copied from https://golang.org/src/net/http/server.go
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			s.logf("panic serving %v: %v\n%s", addr, err, buf)
 		}
 	}(conn.RemoteAddr().String())
 
@@ -131,14 +141,6 @@ func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup)
 	defer cancel()
 
 	s.Handler.ServeConn(ctx, conn)
-}
-
-func (s *Server) recover(err interface{}, addr string) {
-	// Copied from https://golang.org/src/net/http/server.go
-	const size = 64 << 10
-	buf := make([]byte, size)
-	buf = buf[:runtime.Stack(buf, false)]
-	s.logf("panic serving %v: %v\n%s", addr, err, buf)
 }
 
 func (s *Server) logf(format string, args ...interface{}) {

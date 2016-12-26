@@ -1,12 +1,8 @@
 package netx
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"log"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -28,45 +24,34 @@ func (f TunnelHandlerFunc) ServeTunnel(ctx context.Context, from net.Conn, to ne
 	f(ctx, from, to)
 }
 
-// A Tunnel is a connection handler that establishes a second connection to a
+// A Tunnel is a proxy handler that establishes a second connection to a
 // target address for every incoming connection it receives.
 type Tunnel struct {
-	// Network and Address of the target.
-	//
-	// These fields are optional if the tunnel's ServeConn method is never
-	// called.
-	Network string
-	Address string
-
 	// Handler is called by the tunnel when it successfully established a
 	// connection to its target.
 	//
 	// Calling one of the tunnel's method will panic if this field is nil.
 	Handler TunnelHandler
 
-	// ErrorLog is used to log errors detected by the tunnel.
-	ErrorLog *log.Logger
-
 	// DialContext can be set to a dialing function to configure how the tunnel
 	// establishes new connections.
 	DialContext func(context.Context, string, string) (net.Conn, error)
 }
 
-// ServeConn satisfies the Handler interface.
-//
-// When called the tunnel establishes a connection to the target represented by
-// its Network and Address fields.
-func (t *Tunnel) ServeConn(ctx context.Context, from net.Conn) {
-	t.ServeProxy(ctx, from, &TunnelAddr{
-		Net:  t.Network,
-		Addr: t.Address,
-	})
+// CanRead satisfies the ProtoReader interface, always returns true. This means
+// that a tunnel can be used as a fallback protocol in a ProxyProtoMux to simply
+// forward the bytes back and forth if the connection is using an unsupported
+// protocol.
+func (t *Tunnel) CanRead(b []byte) bool {
+	return true
 }
 
 // ServeProxy satisfies the ProxyHandler interface.
 //
 // When called the tunnel establishes a connection to target, then delegate to
 // its handler.
+//
+// The method panics to report errors.
 func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr) {
 	dial := t.DialContext
 
@@ -77,58 +62,8 @@ func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr)
 	to, err := dial(ctx, target.Network(), target.String())
 
 	if err != nil {
-		t.logf("tunnel: %s->%s: %s", from.RemoteAddr(), target, err)
-		return
+		panic(err)
 	}
 
 	t.Handler.ServeTunnel(ctx, from, to)
-}
-
-func (t *Tunnel) logf(fmt string, args ...interface{}) {
-	if log := t.ErrorLog; log != nil {
-		log.Printf(fmt, args...)
-	}
-}
-
-// TunnelAddr is a type satisifying the net.Addr interface.
-type TunnelAddr struct {
-	Net  string
-	Addr string
-}
-
-// Netowrk returns a.Net
-func (a *TunnelAddr) Network() string { return a.Net }
-
-// String returns a.Addr
-func (a *TunnelAddr) String() string { return a.Addr }
-
-// TunnelForwarder is a TunnelHandler that simply passes bytes between the two
-// ends of a tunnel.
-type TunnelForwarder struct{}
-
-// ServeTunnel satisfies the TunnelHandler interface.
-func (t *TunnelForwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn) {
-	defer from.Close()
-	defer to.Close()
-
-	join := &sync.WaitGroup{}
-	join.Add(2)
-
-	go t.forward(from, to, join)
-	go t.forward(to, from, join)
-
-	<-ctx.Done()
-}
-
-func (t *TunnelForwarder) forward(from net.Conn, to net.Conn, join *sync.WaitGroup) {
-	defer join.Done()
-	defer to.Close()
-
-	buf := buffers.Get().(*bytes.Buffer)
-	io.CopyBuffer(to, from, buf.Bytes())
-	buffers.Put(buf)
-}
-
-var buffers = sync.Pool{
-	New: func() interface{} { return bytes.NewBuffer(make([]byte, 16384, 16384)) },
 }

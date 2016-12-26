@@ -3,8 +3,8 @@ package netx
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
+	"os"
 )
 
 // Proxyhandler is an interface that must be implemented by types that intend to
@@ -27,37 +27,57 @@ func (f ProxyHandlerFunc) ServeProxy(ctx context.Context, conn net.Conn, target 
 	f(ctx, conn, target)
 }
 
-// A Proxy is a connection handler for intercepted connections.
-//
-// A proper usage of this proxy type will some iptables rules to redirect TCP
-// connections to to the listener this proxy has been setup with.
+// A Proxy is a connection handler that forwards its connections to a proxy
+// handler.
 type Proxy struct {
+	// Network and Address represent the target to which the proxy is forwarding
+	// connections.
+	Network string
+	Address string
+
+	// Handler is the proxy handler to which connetions are forwarded to.
+	Handler ProxyHandler
+}
+
+// CanRead satisfies the ProtoReader interface, always returns true. This means
+// that a proxy can be used as a fallback protocol in a ProtoMux to simply
+// forward the bytes back and forth if the connection is using an unsupported
+// protocol.
+func (p *Proxy) CanRead(b []byte) bool {
+	return true
+}
+
+// ServeConn satsifies the Handler interface.
+func (p *Proxy) ServeConn(ctx context.Context, conn net.Conn) {
+	p.Handler.ServeProxy(ctx, conn, &NetAddr{
+		Net:  p.Network,
+		Addr: p.Address,
+	})
+}
+
+// A TransparentProxy is a connection handler for intercepted connections.
+//
+// A proper usage of this proxy requires some iptables rules to redirect TCP
+// connections to to the listener its attached to.
+type TransparentProxy struct {
 	// Handler is called by the proxy when it receives a connection that can be
 	// proxied.
 	//
 	// Calling ServeConn on the proxy will panic if this field is nil.
 	Handler ProxyHandler
-
-	// ErrorLog is used to log errors detected by the proxy.
-	ErrorLog *log.Logger
 }
 
 // ServeConn satisfies the Handler interface.
-func (p *Proxy) ServeConn(ctx context.Context, conn net.Conn) {
+//
+// The method panics to report errors.
+func (p *TransparentProxy) ServeConn(ctx context.Context, conn net.Conn) {
 	target, err := OriginalTargetAddr(conn)
 
 	if err != nil {
-		p.logf("proxy: %s->%s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
-		return
+		panic(err)
 	}
 
 	p.Handler.ServeProxy(ctx, conn, target)
-}
-
-func (p *Proxy) logf(fmt string, args ...interface{}) {
-	if log := p.ErrorLog; log != nil {
-		log.Printf(fmt, args...)
-	}
 }
 
 // OriginalTargetAddr returns the original address that an intercepted connection
@@ -68,12 +88,17 @@ func (p *Proxy) logf(fmt string, args ...interface{}) {
 // The function panics if conn is nil.
 func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
 	socket, ok := conn.(interface {
-		Fd() uintptr
+		File() (*os.File, error)
 	})
 
 	if !ok {
 		return nil, fmt.Errorf("%T has no Fd method, the original destination target address cannot be retrieved", conn)
 	}
 
-	return originalTargetAddr(socket.Fd())
+	file, err := socket.File()
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return originalTargetAddr(file.Fd())
 }
