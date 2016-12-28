@@ -2,6 +2,7 @@ package netx
 
 import (
 	"context"
+	"io"
 	"net"
 	"time"
 )
@@ -40,7 +41,7 @@ type Tunnel struct {
 
 // CanRead satisfies the ProtoReader interface, always returns true. This means
 // that a tunnel can be used as a fallback protocol in a ProxyProtoMux.
-func (t *Tunnel) CanRead(b []byte) bool {
+func (t *Tunnel) CanRead(r io.Reader) bool {
 	return true
 }
 

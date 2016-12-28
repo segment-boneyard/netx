@@ -3,6 +3,7 @@ package netx
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
@@ -41,7 +42,7 @@ type Proxy struct {
 
 // CanRead satisfies the ProtoReader interface, always returns true. This means
 // that a proxy can be used as a fallback protocol in a ProtoMux.
-func (p *Proxy) CanRead(b []byte) bool {
+func (p *Proxy) CanRead(r io.Reader) bool {
 	return true
 }
 

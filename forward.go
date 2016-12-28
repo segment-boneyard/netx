@@ -15,7 +15,7 @@ type Forwarder struct{}
 // CanRead satisfies the ProtoReader interface, always returns true. This means
 // that a forwarder can be used as a fallback protocol in a TunnelProtoMux to
 // simply pass the bytes back and forth.
-func (t *Forwarder) CanRead(b []byte) bool {
+func (t *Forwarder) CanRead(r io.Reader) bool {
 	return true
 }
 

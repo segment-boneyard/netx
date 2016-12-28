@@ -1,6 +1,7 @@
 package netx
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -101,17 +102,17 @@ func testProtoMux(t *testing.T, handler Handler) {
 		var b [512]byte
 
 		// test the protoEchoRev route
-		if _, err := conn.Write([]byte("/rev Hello World!")); err != nil {
+		if _, err := conn.Write([]byte("/rev Hello World!\n")); err != nil {
 			t.Error(err)
 			return
 		}
 
-		if _, err := io.ReadFull(conn, b[:12]); err != nil {
-			t.Error(err)
+		if n, err := io.ReadFull(conn, b[:13]); err != nil {
+			t.Error(n, err, string(b[:n]))
 			return
 		}
 
-		if s := string(b[:12]); s != "!dlroW olleH" {
+		if s := string(b[:13]); s != "!dlroW olleH\n" {
 			t.Error(s)
 			return
 		}
@@ -121,15 +122,21 @@ func testProtoMux(t *testing.T, handler Handler) {
 // protoEcho implements the Proto* interfaces on top of a Echo handler.
 type protoEcho struct{ Echo }
 
-func (p *protoEcho) CanRead(b []byte) bool                        { return true }
+func (p *protoEcho) CanRead(r io.Reader) bool                     { return true }
 func (p *protoEcho) ServeConn(ctx context.Context, conn net.Conn) { p.Echo.ServeConn(ctx, conn) }
 
 // protoEchoRev implements the Proto* interfaces, it's similar to a Echo handler
 // but reverses data chunks before returning them.
 type protoEchoRev struct{}
 
-func (p *protoEchoRev) CanRead(b []byte) bool {
-	return bytes.HasPrefix(b, []byte("/rev "))
+func (p *protoEchoRev) CanRead(r io.Reader) bool {
+	var b [5]byte
+
+	if _, err := io.ReadFull(r, b[:]); err != nil {
+		return false
+	}
+
+	return string(b[:]) == "/rev "
 }
 
 func (p *protoEchoRev) ServeConn(ctx context.Context, conn net.Conn) {
@@ -137,18 +144,26 @@ func (p *protoEchoRev) ServeConn(ctx context.Context, conn net.Conn) {
 		<-ctx.Done()
 		conn.Close()
 	}()
-	var b [512]byte
+
+	r := bufio.NewReader(conn)
 	for {
-		n, err := conn.Read(b[:])
+		line, err := r.ReadBytes('\n')
 		if err != nil {
 			return
 		}
-		for i, j := 0, n-1; i < j; {
-			b[i], b[j] = b[j], b[i]
+
+		if !bytes.HasPrefix(line, []byte("/rev ")) {
+			return
+		}
+
+		line = line[5:]
+
+		for i, j := 0, len(line)-2; i < j; {
+			line[i], line[j] = line[j], line[i]
 			i++
 			j--
 		}
-		if _, err = conn.Write(b[:n-4]); err != nil {
+		if _, err = conn.Write(line); err != nil {
 			return
 		}
 	}

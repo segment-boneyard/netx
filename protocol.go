@@ -3,14 +3,15 @@ package netx
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"time"
 )
 
 // ProtoReader is an interface implemented by protocols to figure out whether
-// they recognize a blob of data.
+// they recognize a data stream.
 type ProtoReader interface {
-	CanRead([]byte) bool
+	CanRead(io.Reader) bool
 }
 
 // Proto is an interface used to represent connection oriented protocols that
@@ -49,21 +50,17 @@ type ProtoMux struct {
 //
 // The method panics to report errors.
 func (mux *ProtoMux) ServeConn(ctx context.Context, conn net.Conn) {
-	var b []byte
-	var err error
-
-	if conn, b, err = peekContextTimeout(ctx, conn, mux.ReadTimeout); err != nil {
-		return // timeout or the connection was closed
+	readers := make([]ProtoReader, len(mux.Protocols))
+	for i, p := range mux.Protocols {
+		readers[i] = p
 	}
 
-	for _, proto := range mux.Protocols {
-		if proto.CanRead(b) {
-			proto.ServeConn(ctx, conn)
-			return
-		}
+	i, conn := guessProtocol(ctx, conn, mux.ReadTimeout, readers...)
+	if i < 0 {
+		panic(errUnsupportedProtocol)
 	}
 
-	panic(errUnsupportedProtocol)
+	mux.Protocols[i].ServeConn(ctx, conn)
 }
 
 // ProxyProtoMux is a proxy handler that implement dynamic protocol discovery.
@@ -81,21 +78,17 @@ type ProxyProtoMux struct {
 //
 // The method panics to report errors.
 func (mux *ProxyProtoMux) ServeProxy(ctx context.Context, conn net.Conn, target net.Addr) {
-	var b []byte
-	var err error
-
-	if conn, b, err = peekContextTimeout(ctx, conn, mux.ReadTimeout); err != nil {
-		return // timeout or the connection was closed
+	readers := make([]ProtoReader, len(mux.Protocols))
+	for i, p := range mux.Protocols {
+		readers[i] = p
 	}
 
-	for _, proto := range mux.Protocols {
-		if proto.CanRead(b) {
-			proto.ServeProxy(ctx, conn, target)
-			return
-		}
+	i, conn := guessProtocol(ctx, conn, mux.ReadTimeout, readers...)
+	if i < 0 {
+		panic(errUnsupportedProtocol)
 	}
 
-	panic(errUnsupportedProtocol)
+	mux.Protocols[i].ServeProxy(ctx, conn, target)
 }
 
 // TunnelProtoMux is a tunnel handler that implement dynamic protocol discovery.
@@ -135,71 +128,104 @@ func (mux *TunnelProtoMux) ServeTunnel(ctx context.Context, from net.Conn, to ne
 	}
 	defer cancel2()
 
-	var b []byte
+	readers := make([]ProtoReader, len(mux.Protocols))
+	for i, p := range mux.Protocols {
+		readers[i] = p
+	}
+
+	var i int
 	select {
 	case <-ready1:
 		cancel2()
-		from, b, err = peek(from)
+		i, from = guessProtocol(ctx, from, mux.ReadTimeout, readers...)
 	case <-ready2:
 		cancel1()
-		to, b, err = peek(to)
+		i, to = guessProtocol(ctx, to, mux.ReadTimeout, readers...)
 	case <-ctx.Done():
 		return
 	}
 
-	if err != nil {
-		return // one of the connections were closed
+	if i < 0 {
+		panic(errUnsupportedProtocol)
 	}
 
-	for _, proto := range mux.Protocols {
-		if proto.CanRead(b) {
-			proto.ServeTunnel(ctx, from, to)
-			return
+	mux.Protocols[i].ServeTunnel(ctx, from, to)
+}
+
+func guessProtocol(ctx context.Context, conn net.Conn, timeout time.Duration, protos ...ProtoReader) (int, net.Conn) {
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			conn.Close()
+		}
+	}()
+
+	if timeout != 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+			panic(err)
 		}
 	}
 
-	panic(errUnsupportedProtocol)
-}
-
-func peekContextTimeout(ctx context.Context, conn net.Conn, timeout time.Duration) (net.Conn, []byte, error) {
-	if timeout != 0 {
-		newCtx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		ctx = newCtx
-	}
-	return peekContext(ctx, conn)
-}
-
-func peekContext(ctx context.Context, conn net.Conn) (net.Conn, []byte, error) {
-	var ready <-chan struct{}
-	var cancel func()
-	var err error
-
-	if ready, cancel, err = PollRead(conn); err != nil {
-		return conn, nil, err
-	}
-	defer cancel()
-
-	select {
-	case <-ready:
-	case <-ctx.Done():
-		return conn, nil, ctx.Err()
+	tr := &teeReader{
+		r: conn,
+		b: make([]byte, 0, 1024),
 	}
 
-	return peek(conn)
-}
-
-func peek(conn net.Conn) (net.Conn, []byte, error) {
-	b := make([]byte, 512)
-
-	n, err := conn.Read(b)
-	if err != nil {
-		return conn, nil, err
+	for i, proto := range protos {
+		if proto.CanRead(tr) {
+			return i, &protoConn{conn, tr.bytes()}
+		}
+		tr.reset()
 	}
 
-	return &protoConn{conn, b[:n]}, b[:n], nil
+	return -1, &protoConn{conn, tr.bytes()}
 }
 
+// teeReader is an io.Reader which records all data it reads, then can be reset
+// to replay them.
+type teeReader struct {
+	r io.Reader
+	b []byte
+	i int
+}
+
+func (t *teeReader) reset() {
+	t.i = 0
+}
+
+func (t *teeReader) bytes() []byte {
+	return t.b
+}
+
+func (t *teeReader) Read(b []byte) (n int, err error) {
+	if t.i < len(t.b) {
+		n1 := len(t.b) - t.i
+		n2 := len(b)
+
+		if n2 > n1 {
+			n2 = n1
+		}
+
+		copy(b, t.b[t.i:t.i+n2])
+		t.i += n2
+		n = n2
+		return
+	}
+
+	if n, err = t.r.Read(b); n > 0 {
+		t.b = append(t.b, b[:n]...)
+		t.i += n
+	}
+
+	return
+}
+
+// protoConn is a net.Conn which is preloaded with some data that will be read
+// by calls to Read before consuming from the underlying network connection.
 type protoConn struct {
 	net.Conn
 	head []byte
@@ -211,7 +237,10 @@ func (c *protoConn) Read(b []byte) (n int, err error) {
 			n = len(b)
 		}
 		copy(b, c.head[:n])
-		c.head = c.head[n:]
+		if c.head = c.head[n:]; len(c.head) == 0 {
+			c.head = nil // release the buffer
+		}
+		b = b[n:]
 		return
 	}
 	return c.Conn.Read(b)

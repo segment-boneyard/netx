@@ -92,18 +92,26 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 	join := &sync.WaitGroup{}
 	defer join.Wait()
 
-	ctx := s.context()
-	go func(ctx context.Context) {
-		<-ctx.Done()
-		lstn.Close()
-	}(ctx)
+	ctx := s.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	errf := func(err error, backoff time.Duration) {
-		s.logf("Accept error: %v; retrying in %v", err, backoff)
+		logf := log.Printf
+		if s.ErrorLog != nil {
+			logf = s.ErrorLog.Printf
+		}
+		logf("Accept error: %v; retrying in %v", err, backoff)
 	}
+
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		lstn.Close()
+	}(ctx)
 
 	for {
 		var conn net.Conn
@@ -118,21 +126,7 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 }
 
 func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup) {
-	defer func(addr string) {
-		err := recover()
-		if err == nil {
-			return
-		}
-		if err, ok := err.(error); ok {
-			s.logf("error serving %v: %v", addr, err)
-		} else {
-			// Copied from https://golang.org/src/net/http/server.go
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			s.logf("panic serving %v: %v\n%s", addr, err, buf)
-		}
-	}(conn.RemoteAddr().String())
+	defer func() { Recover(recover(), conn, s.ErrorLog) }()
 
 	defer join.Done()
 	defer conn.Close()
@@ -143,18 +137,28 @@ func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup)
 	s.Handler.ServeConn(ctx, conn)
 }
 
-func (s *Server) logf(format string, args ...interface{}) {
-	if s.ErrorLog == nil {
-		log.Printf(format, args...)
-	} else {
-		s.ErrorLog.Printf(format, args...)
-	}
-}
+// Recover is intended to be used by servers that gracefully handle panics from
+// their handlers.
+func Recover(err interface{}, conn net.Conn, logger *log.Logger) {
+	addr := conn.RemoteAddr().String()
+	logf := log.Printf
 
-func (s *Server) context() context.Context {
-	ctx := s.Context
-	if ctx == nil {
-		ctx = context.Background()
+	if logger != nil {
+		logf = logger.Printf
 	}
-	return ctx
+
+	if err == nil {
+		return
+	}
+
+	if e, ok := err.(error); ok {
+		logf("error serving %v: %v", addr, e)
+		return
+	}
+
+	// Copied from https://golang.org/src/net/http/server.go
+	const size = 64 << 10
+	buf := make([]byte, size)
+	buf = buf[:runtime.Stack(buf, false)]
+	logf("panic serving %v: %v\n%s", addr, err, buf)
 }
