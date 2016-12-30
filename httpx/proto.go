@@ -220,3 +220,16 @@ func isIdempotent(method string) bool {
 	}
 	return false
 }
+
+// isRetriable returns true if the status is a retriable error.
+func isRetriable(status int) bool {
+	switch status {
+	case http.StatusInternalServerError:
+	case http.StatusBadGateway:
+	case http.StatusServiceUnavailable:
+	case http.StatusGatewayTimeout:
+	default:
+		return false
+	}
+	return true
+}

@@ -535,3 +535,26 @@ func TestIsIdempotent(t *testing.T) {
 		})
 	}
 }
+
+func TestIsRetriable(t *testing.T) {
+	tests := []struct {
+		status int
+		retry  bool
+	}{
+		{http.StatusOK, false},
+		{http.StatusInternalServerError, true},
+		{http.StatusNotImplemented, false},
+		{http.StatusBadGateway, true},
+		{http.StatusServiceUnavailable, true},
+		{http.StatusGatewayTimeout, true},
+		{http.StatusHTTPVersionNotSupported, false},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprint(test.status), func(t *testing.T) {
+			if retry := isRetriable(test.status); retry != test.retry {
+				t.Error(retry)
+			}
+		})
+	}
+}

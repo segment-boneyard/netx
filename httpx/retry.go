@@ -57,6 +57,10 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			break
 		}
 
+		if !isRetriable(res.status) {
+			break
+		}
+
 		if !isIdempotent(req.Method) {
 			break
 		}
@@ -119,7 +123,9 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (res *http.Response, err e
 
 	for attempt := 0; attempt < max; attempt++ {
 		if res, err = transport.RoundTrip(req); err == nil {
-			break
+			if res.StatusCode < 500 || !isRetriable(res.StatusCode) {
+				break
+			}
 		}
 
 		if body.n != 0 {
