@@ -52,3 +52,19 @@ func TestIsTimeout(t *testing.T) {
 	}
 
 }
+
+func TestTimeout(t *testing.T) {
+	err := Timeout("something went wrong")
+
+	if !IsTimeout(err) {
+		t.Error("not a timeout error")
+	}
+
+	if !IsTemporary(err) {
+		t.Error("not a temporary error")
+	}
+
+	if s := err.Error(); s != "something went wrong" {
+		t.Error("bad error message:", s)
+	}
+}
