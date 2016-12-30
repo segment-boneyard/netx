@@ -9,7 +9,35 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/net/nettest"
 )
+
+func TestServerConn(t *testing.T) {
+	nettest.TestConn(t, func() (c1 net.Conn, c2 net.Conn, stop func(), err error) {
+		cnch := make(chan net.Conn)
+		done := make(chan struct{})
+
+		n, a, f := listenAndServe(HandlerFunc(func(ctx context.Context, conn net.Conn) {
+			cnch <- conn
+			<-done
+		}))
+
+		if c1, err = net.Dial(n, a); err != nil {
+			return
+		}
+
+		c2 = <-cnch
+
+		stop = func() {
+			close(done)
+			c2.Close()
+			c1.Close()
+			f()
+		}
+		return
+	})
+}
 
 func TestEchoServer(t *testing.T) {
 	for _, test := range []struct {
