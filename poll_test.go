@@ -16,6 +16,8 @@ func TestPollRead(t *testing.T) {
 		return
 	}
 	defer conn1.Close()
+	f1, _ := conn1.(File).File()
+	defer f1.Close()
 
 	conn2, err := net.Dial(net0, addr0)
 	if err != nil {
@@ -23,15 +25,17 @@ func TestPollRead(t *testing.T) {
 		return
 	}
 	defer conn2.Close()
+	f2, _ := conn2.(File).File()
+	defer f2.Close()
 
-	ready1, cancel1, err := PollRead(conn1)
+	ready1, cancel1, err := PollRead(f1)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	defer cancel1()
 
-	ready2, cancel2, err := PollRead(conn2)
+	ready2, cancel2, err := PollRead(f2)
 	if err != nil {
 		t.Error(err)
 		return

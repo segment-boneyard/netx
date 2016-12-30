@@ -2,7 +2,7 @@ package netx
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -70,7 +70,18 @@ type TransparentProxy struct {
 //
 // The method panics to report errors.
 func (p *TransparentProxy) ServeConn(ctx context.Context, conn net.Conn) {
-	target, err := OriginalTargetAddr(conn)
+	socket, ok := conn.(File)
+	if !ok {
+		panic(errors.New("transparent proxies should be used with connection that implement netx.File"))
+	}
+
+	f, err := socket.File()
+	if err != nil {
+		panic(err)
+	}
+
+	target, err := OriginalTargetAddr(f)
+	f.Close()
 
 	if err != nil {
 		panic(err)
@@ -84,20 +95,7 @@ func (p *TransparentProxy) ServeConn(ctx context.Context, conn net.Conn) {
 //
 // Note that this feature is only available for TCP connections on linux systems.
 //
-// The function panics if conn is nil.
-func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
-	socket, ok := conn.(interface {
-		File() (*os.File, error)
-	})
-
-	if !ok {
-		return nil, fmt.Errorf("%T has no Fd method, the original destination target address cannot be retrieved", conn)
-	}
-
-	file, err := socket.File()
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	return originalTargetAddr(file.Fd())
+// The function panics if f is nil.
+func OriginalTargetAddr(f *os.File) (net.Addr, error) {
+	return originalTargetAddr(f.Fd())
 }

@@ -3,7 +3,6 @@
 package netx
 
 import (
-	"net"
 	"os"
 	"runtime"
 	"sync"
@@ -15,25 +14,7 @@ type filePoller struct {
 	fd    uintptr
 	once  sync.Once
 	mutex sync.Mutex
-	files map[uintptr]*file
-}
-
-type file struct {
-	m sync.Mutex
-	f *os.File
-	c chan<- struct{}
-}
-
-func (fp *file) close() {
-	fp.m.Lock()
-
-	if fp.f != nil {
-		fp.f.Close()
-		fp.f = nil
-		close(fp.c)
-	}
-
-	fp.m.Unlock()
+	files map[uintptr](chan<- struct{})
 }
 
 func (p *filePoller) init() {
@@ -44,7 +25,7 @@ func (p *filePoller) init() {
 		}
 
 		p.fd = fd
-		p.files = make(map[uintptr]*file)
+		p.files = make(map[uintptr](chan<- struct{}))
 
 		go func(p *filePoller) {
 			// Lock the OS thread because we're using blocking syscalls on this
@@ -69,51 +50,34 @@ func (p *filePoller) init() {
 				if n <= 0 {
 					continue
 				}
+				p.mutex.Lock()
 
 				for _, ev := range events[:n] {
-					p.mutex.Lock()
 					fd := uintptr(ev.Ident)
-					fp := p.files[fd]
+					ch := p.files[fd]
 					delete(p.files, fd)
-					p.mutex.Unlock()
 
-					if fp != nil {
-						fp.close()
+					// Notify the ready channel in a non-blocking manner.
+					if ch != nil {
+						close(ch)
 					}
 				}
+
+				p.mutex.Unlock()
 			}
 		}(p)
 	})
 	return
 }
 
-func (p *filePoller) register(conn net.Conn) (ready <-chan struct{}, cancel func(), err error) {
+func (p *filePoller) register(f *os.File) (ready <-chan struct{}, cancel func(), err error) {
 	p.init()
 
-	var f *os.File
-
-	if f, err = conn.(interface {
-		File() (*os.File, error)
-	}).File(); err != nil {
-		return
-	}
-
-	c := make(chan struct{})
+	ch := make(chan struct{})
 	fd := f.Fd()
-	fp := &file{
-		f: f,
-		c: c,
-	}
-
-	cancel = func() {
-		p.mutex.Lock()
-		delete(p.files, fd)
-		p.mutex.Unlock()
-		fp.close()
-	}
 
 	p.mutex.Lock()
-	p.files[fd] = fp
+	p.files[fd] = ch
 	p.mutex.Unlock()
 
 	if err = kevent(p.fd, syscall.Kevent_t{
@@ -121,12 +85,24 @@ func (p *filePoller) register(conn net.Conn) (ready <-chan struct{}, cancel func
 		Filter: syscall.EVFILT_READ,
 		Flags:  syscall.EV_ADD | syscall.EV_EOF | syscall.EV_CLEAR,
 	}); err != nil {
-		cancel()
-		cancel = nil
+		p.mutex.Lock()
+		delete(p.files, fd)
+		p.mutex.Unlock()
 		return
 	}
 
-	ready = c
+	cancel = func() {
+		kevent(p.fd, syscall.Kevent_t{
+			Ident:  uint64(fd),
+			Filter: syscall.EVFILT_READ,
+			Flags:  syscall.EV_DELETE,
+		})
+		p.mutex.Lock()
+		delete(p.files, fd)
+		p.mutex.Unlock()
+	}
+
+	ready = ch
 	return
 }
 
@@ -134,8 +110,8 @@ var (
 	poller filePoller
 )
 
-func pollRead(conn net.Conn) (ready <-chan struct{}, cancel func(), err error) {
-	return poller.register(conn)
+func pollRead(f *os.File) (<-chan struct{}, func(), error) {
+	return poller.register(f)
 }
 
 func errno(err syscall.Errno) error {
