@@ -45,7 +45,7 @@ func copyHeader(dst http.Header, src http.Header) {
 // deleteHopFields deletes the hop-by-hop fields from header.
 func deleteHopFields(h http.Header) {
 	forEachHeaderValues(h["Connection"], func(v string) {
-		if v != "close" && v != "keep-alive" {
+		if v != "close" {
 			h.Del(v)
 		}
 	})

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -67,24 +68,32 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		maxHeaderBytes = DefaultMaxHeaderBytes
 	}
 
-	for close, conn := false, newServerConn(conn); !close; {
+	baseHeader := http.Header{"Server": {s.ServerName}}
+	if idleTimeout := s.IdleTimeout; idleTimeout != 0 {
+		baseHeader.Set("Connection", "Keep-Alive")
+		baseHeader.Set("Keep-Alive", fmt.Sprintf("timeout=%d", int(idleTimeout/time.Second)))
+	}
+
+	srv := newServerConn(conn)
+	res := &responseWriter{
+		header:  http.Header{},
+		conn:    srv,
+		timeout: s.WriteTimeout,
+	}
+	copyHeader(res.header, baseHeader)
+
+	for close := false; !close; {
 		var req *http.Request
 		var err error
 
-		if err = conn.waitReadyRead(ctx, s.IdleTimeout); err != nil {
+		if err = srv.waitReadyRead(ctx, s.IdleTimeout); err != nil {
 			return
 		}
 
-		if req, err = conn.readRequest(ctx, maxHeaderBytes, s.ReadTimeout); err != nil {
+		if req, err = srv.readRequest(ctx, maxHeaderBytes, s.ReadTimeout); err != nil {
 			return
 		}
-
-		res := &responseWriter{
-			header:  http.Header{"Server": {s.ServerName}},
-			conn:    conn,
-			req:     req,
-			timeout: s.WriteTimeout,
-		}
+		res.req = req
 
 		if close = req.Close; close {
 			if req.ProtoAtLeast(1, 1) {
@@ -105,6 +114,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		if res.err != nil { // probably lost the connection
 			return
 		}
+
+		res.header = http.Header{}
+		copyHeader(res.header, baseHeader)
 	}
 }
 
