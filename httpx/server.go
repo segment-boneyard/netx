@@ -357,7 +357,9 @@ func (res *responseWriter) WriteHeader(status int) {
 		res.cw.n = 0
 	}
 
-	h.Set("Date", now().Format(time.RFC1123))
+	if _, hasDate := h["Date"]; !hasDate {
+		h.Set("Date", now().Format(time.RFC1123))
+	}
 
 	b = append(b, res.req.Proto...)
 	b = append(b, ' ')
