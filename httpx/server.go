@@ -83,7 +83,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 	defer sc.Close()
 
 	res := &responseWriter{
-		header:  http.Header{},
+		header:  make(http.Header, 10),
 		conn:    sc,
 		timeout: s.WriteTimeout,
 	}
@@ -405,7 +405,7 @@ func (res *responseWriter) reset(baseHeader http.Header) {
 	res.cw.w = nil
 	res.cw.n = 0
 	res.req = nil
-	res.header = http.Header{}
+	res.header = make(http.Header, 10)
 	copyHeader(res.header, baseHeader)
 }
 

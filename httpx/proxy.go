@@ -50,7 +50,7 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	outurl := *req.URL
 	outreq := *req
 	outreq.URL = &outurl
-	outreq.Header = make(http.Header)
+	outreq.Header = make(http.Header, len(req.Header))
 	outreq.Proto = "HTTP/1.1"
 	outreq.ProtoMajor = 1
 	outreq.ProtoMinor = 1

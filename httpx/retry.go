@@ -39,7 +39,7 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	body := &retryRequestBody{ReadCloser: req.Body}
 	req.Body = body
 
-	res := &retryResponseWriter{ResponseWriter: w, header: make(http.Header)}
+	res := &retryResponseWriter{ResponseWriter: w, header: make(http.Header, 10)}
 
 	max := h.MaxAttempts
 	if max == 0 {
