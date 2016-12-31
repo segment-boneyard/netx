@@ -210,3 +210,113 @@ func TestAcceptNegotiate(t *testing.T) {
 		})
 	}
 }
+
+func TestParseAcceptEncodingItemSuccess(t *testing.T) {
+	tests := []struct {
+		s string
+		a AcceptEncodingItem
+	}{
+		{
+			s: `gzip`,
+			a: AcceptEncodingItem{
+				Coding: "gzip",
+				Q:      1.0,
+			},
+		},
+		{
+			s: `gzip;q=0`,
+			a: AcceptEncodingItem{
+				Coding: "gzip",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.a.String(), func(t *testing.T) {
+			a, err := ParseAcceptEncodingItem(test.s)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if !reflect.DeepEqual(a, test.a) {
+				t.Error(a)
+			}
+		})
+	}
+
+}
+
+func TestParseAcceptEncodingItemFailure(t *testing.T) {
+	tests := []struct {
+		s string
+	}{
+		{``},               // empty string
+		{`q=`},             // missing value
+		{`gzip;key=value`}, // not q=X
+	}
+
+	for _, test := range tests {
+		t.Run(test.s, func(t *testing.T) {
+			if a, err := ParseAcceptEncodingItem(test.s); err == nil {
+				t.Error(a)
+			}
+		})
+	}
+}
+
+func TestParseAcceptEncodingSuccess(t *testing.T) {
+	tests := []struct {
+		s string
+		a AcceptEncoding
+	}{
+		{
+			s: `gzip;q=1.0, *;q=0, identity; q=0.5`,
+			a: AcceptEncoding{
+				{
+					Coding: "gzip",
+					Q:      1.0,
+				},
+				{
+					Coding: "identity",
+					Q:      0.5,
+				},
+				{
+					Coding: "*",
+					Q:      0.0,
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.a.String(), func(t *testing.T) {
+			a, err := ParseAcceptEncoding(test.s)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if !reflect.DeepEqual(a, test.a) {
+				t.Error(a)
+			}
+		})
+	}
+}
+
+func TestParseAcceptEncodingFailure(t *testing.T) {
+	tests := []struct {
+		s string
+	}{
+		{`gzip;`},          // missing q=X
+		{`gzip;key=value`}, // not q=X
+	}
+
+	for _, test := range tests {
+		t.Run(test.s, func(t *testing.T) {
+			if a, err := ParseAcceptEncoding(test.s); err == nil {
+				t.Error(a)
+			}
+		})
+	}
+}

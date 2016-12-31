@@ -182,13 +182,14 @@ func (item AcceptEncodingItem) String() string {
 
 // String satisfies the fmt.Stringer interface.
 func (item AcceptEncodingItem) Format(w fmt.State, _ rune) {
-	fmt.Fprint(w, "%s;q=%.1f", item.Coding, item.Q)
+	fmt.Fprintf(w, "%s;q=%.1f", item.Coding, item.Q)
 }
 
 // ParseAcceptEncodingItem parses a single item in an Accept-Encoding header.
 func ParseAcceptEncodingItem(s string) (item AcceptEncodingItem, err error) {
 	if i := strings.IndexByte(s, ';'); i < 0 {
 		item.Coding = s
+		item.Q = 1.0
 	} else {
 		var p MediaParam
 
@@ -233,7 +234,7 @@ func (accept AcceptEncoding) Format(w fmt.State, r rune) {
 // Less satisfies sort.Interface.
 func (accept AcceptEncoding) Less(i int, j int) bool {
 	ai, aj := &accept[i], &accept[j]
-	return ai.Q < aj.Q || (ai.Q == aj.Q && ai.Coding < ai.Coding)
+	return ai.Q > aj.Q || (ai.Q == aj.Q && mediaTypeLess(ai.Coding, aj.Coding))
 }
 
 // Swap satisfies sort.Interface.
