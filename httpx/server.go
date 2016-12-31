@@ -451,11 +451,11 @@ func (res *chunkWriter) Write(b []byte) (n int, err error) {
 		n1 := len(b)
 		n2 := len(res.b) - res.n
 
-		if n1 > n2 {
+		if n1 >= n2 {
 			if res.n == 0 {
 				// Nothing is buffered and we have a large chunk already, bypass
 				// the chunkWriter's buffer and directly output to its writer.
-				return res.write(b)
+				return res.writeChunk(b)
 			}
 			n1 = n2
 		}
@@ -483,7 +483,7 @@ func (res *chunkWriter) Close() (err error) {
 func (res *chunkWriter) Flush() (err error) {
 	var n int
 
-	if n, err = res.write(res.b[:res.n]); n > 0 {
+	if n, err = res.writeChunk(res.b[:res.n]); n > 0 {
 		if n == res.n {
 			res.n = 0
 		} else {
@@ -497,7 +497,7 @@ func (res *chunkWriter) Flush() (err error) {
 	return
 }
 
-func (res *chunkWriter) write(b []byte) (n int, err error) {
+func (res *chunkWriter) writeChunk(b []byte) (n int, err error) {
 	if len(b) == 0 {
 		// Don't write empty chunks, they would be misinterpreted as the end of
 		// the stream.
