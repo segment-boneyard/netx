@@ -89,9 +89,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 	}
 	copyHeader(res.header, baseHeader)
 
-	for close := false; !close; {
+	for {
 		var req *http.Request
 		var err error
+		var closed bool
 
 		if err = sc.waitReadyRead(ctx, s.IdleTimeout); err != nil {
 			return
@@ -101,7 +102,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		}
 		res.req = req
 
-		if close = req.Close; close {
+		if closed = req.Close; closed {
 			if req.ProtoAtLeast(1, 1) {
 				res.header.Add("Connection", "close")
 			}
@@ -117,6 +118,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 		if res.err != nil { // probably lost the connection
+			return
+		}
+		if closed || req.Close {
 			return
 		}
 
@@ -173,7 +177,8 @@ func (s *Server) serveHTTP(w http.ResponseWriter, req *http.Request, conn net.Co
 			if res.status == 0 {
 				res.WriteHeader(http.StatusInternalServerError)
 			} else {
-				conn.Close()
+				req.Close = true
+				return
 			}
 		}
 
