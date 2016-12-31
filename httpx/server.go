@@ -3,7 +3,6 @@ package httpx
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -114,10 +113,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 
 		s.serveHTTP(res, req, conn)
 
-		if res.conn == nil { // hijacked
-			return
-		}
-		if res.err != nil { // probably lost the connection
+		if res.err != nil { // hijacked, or lost the connection
 			return
 		}
 		if closed || req.Close {
@@ -284,19 +280,18 @@ func (conn *serverConn) readRequest(ctx context.Context, maxHeaderBytes int, tim
 // responseWriter is an implementation of the http.ResponseWriter interface.
 //
 // Instances of responseWriter provide most of the features exposed in the
-// standard library, however there are a couple differences:
-// - There is no support for HTTP trailers.
-// - No automatic detection of the content type is done, this doesn't work
-// anyway if a content encoding is managed by a request handler.
+// standard library, however it doesn't do automatic detection of the content
+// type.
 type responseWriter struct {
-	status  int
-	header  http.Header
-	conn    *serverConn
-	req     *http.Request
-	timeout time.Duration
-	err     error
-	chunked bool
-	cw      chunkWriter
+	status  int           // status code of the response
+	header  http.Header   // header sent in the response
+	conn    *serverConn   // connection that the server got a request from
+	req     *http.Request // request that the writer sends a response for
+	timeout time.Duration // timeout for the full write operation
+	err     error         // any error detected internally by the writer
+	remain  uint64        // the remaining number of bytes to write
+	chunked bool          // true when the writer uses "Transfer-Encoding: chunked"
+	cw      chunkWriter   // chunk writer used with "Transfer-Encoding: chunked"
 }
 
 // Hijack satisfies the http.Hijacker interface.
@@ -316,7 +311,7 @@ func (res *responseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err er
 	conn, rw = res.conn.c.Conn, bufio.NewReadWriter(&res.conn.Reader, &res.conn.Writer)
 	res.conn.closeFile()
 	res.conn = nil
-	res.err = errHijacked
+	res.err = http.ErrHijacked
 
 	// Cancel all deadlines on the connection before returning it.
 	conn.SetDeadline(time.Time{})
@@ -350,11 +345,17 @@ func (res *responseWriter) WriteHeader(status int) {
 		c.SetWriteDeadline(time.Now().Add(timeout))
 	}
 
-	if _, hasLen := h["Content-Length"]; !hasLen {
+	if s, hasLen := h["Content-Length"]; !hasLen {
 		h.Set("Transfer-Encoding", "chunked")
 		res.chunked = true
 		res.cw.w = res.conn
 		res.cw.n = 0
+	} else {
+		if res.remain, res.err = strconv.ParseUint(s[0], 10, 64); res.err != nil {
+			// The program put an invalid value in Content-Length, that's a
+			// programming error.
+			panic("bad Content-Length: " + s[0])
+		}
 	}
 
 	if _, hasDate := h["Date"]; !hasDate {
@@ -384,29 +385,30 @@ func (res *responseWriter) WriteHeader(status int) {
 
 // Write satisfies the io.Writer and http.ResponseWriter interfaces.
 func (res *responseWriter) Write(b []byte) (n int, err error) {
-	if res.conn == nil {
-		err = errHijacked
-		return
-	}
-	if err = res.err; err != nil {
-		return
-	}
+	if err = res.err; err == nil {
+		res.WriteHeader(0)
 
-	res.WriteHeader(0)
+		if res.chunked {
+			n, err = res.cw.Write(b)
+		} else {
+			if uint64(len(b)) > res.remain {
+				// The program sent more bytes that it declared in the
+				// Content-Length header.
+				panic(http.ErrContentLength)
+			}
+			if n, err = res.conn.Write(b); n > 0 {
+				res.remain -= uint64(n)
+			}
+		}
 
-	if res.chunked {
-		n, err = res.cw.Write(b)
-	} else {
-		n, err = res.conn.Write(b)
+		res.err = err
 	}
-
-	res.err = err
 	return
 }
 
 // Flush satsifies the http.Flusher interface.
 func (res *responseWriter) Flush() {
-	if res.conn != nil && res.err == nil {
+	if res.err == nil {
 		res.WriteHeader(0)
 
 		if res.err == nil {
@@ -431,6 +433,7 @@ func (res *responseWriter) close() {
 }
 
 func (res *responseWriter) reset(baseHeader http.Header) {
+	res.remain = 0
 	res.chunked = false
 	res.cw.w = nil
 	res.cw.n = 0
@@ -519,8 +522,7 @@ func (res *chunkWriter) writeChunk(b []byte) (n int, err error) {
 }
 
 var (
-	timezone    = time.FixedZone("GMT", 0)
-	errHijacked = errors.New("the HTTP connection has already been hijacked")
+	timezone = time.FixedZone("GMT", 0)
 )
 
 func now() time.Time {
