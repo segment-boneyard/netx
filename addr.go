@@ -6,7 +6,7 @@ type NetAddr struct {
 	Addr string
 }
 
-// Netowrk returns a.Net
+// Network returns a.Net
 func (a *NetAddr) Network() string { return a.Net }
 
 // String returns a.Addr

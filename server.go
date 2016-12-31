@@ -52,7 +52,7 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 // receives back to the client.
 type Echo struct{}
 
-// Satisfies the Handler interface.
+// ServeConn satisfies the Handler interface.
 func (e *Echo) ServeConn(ctx context.Context, conn net.Conn) {
 	go func() {
 		<-ctx.Done()

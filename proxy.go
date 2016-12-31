@@ -8,7 +8,7 @@ import (
 	"os"
 )
 
-// Proxyhandler is an interface that must be implemented by types that intend to
+// ProxyHandler is an interface that must be implemented by types that intend to
 // proxy connections.
 //
 // The ServeProxy method is called by a Proxy when it receives a new connection.

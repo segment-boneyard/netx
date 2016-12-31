@@ -22,7 +22,7 @@ func (item AcceptItem) String() string {
 	return fmt.Sprint(item)
 }
 
-// String satisfies the fmt.Stringer interface.
+// Format satisfies the fmt.Formatter interface.
 func (item AcceptItem) Format(w fmt.State, _ rune) {
 	fmt.Fprintf(w, "%s/%s", item.Type, item.SubType)
 
@@ -180,7 +180,7 @@ func (item AcceptEncodingItem) String() string {
 	return fmt.Sprint(item)
 }
 
-// String satisfies the fmt.Stringer interface.
+// Format satisfies the fmt.Formatter interface.
 func (item AcceptEncodingItem) Format(w fmt.State, _ rune) {
 	fmt.Fprintf(w, "%s;q=%.1f", item.Coding, item.Q)
 }
