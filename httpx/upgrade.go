@@ -86,7 +86,7 @@ func (mux *UpgradeMux) HandleFunc(name string, handler func(http.ResponseWriter,
 	mux.Handle(name, http.HandlerFunc(handler))
 }
 
-// Handler retuns the appropriate http.Handler for serving req.
+// Handler returns the appropriate http.Handler for serving req.
 func (mux *UpgradeMux) Handler(req *http.Request) http.Handler {
 	key := http.CanonicalHeaderKey(req.Header.Get("Upgrade"))
 

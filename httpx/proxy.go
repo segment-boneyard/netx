@@ -249,7 +249,7 @@ func requestLocalAddr(req *http.Request) string {
 	return addr.String()
 }
 
-// contextLocalAddr looks for the request's local addres in ctx and returns it.
+// contextLocalAddr looks for the request's local address in ctx and returns it.
 func contextLocalAddr(ctx context.Context) net.Addr {
 	val := ctx.Value(http.LocalAddrContextKey)
 	if val == nil {

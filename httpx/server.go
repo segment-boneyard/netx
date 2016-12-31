@@ -167,7 +167,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, req *http.Request, conn net.Co
 		if err != nil {
 			netx.Recover(err, conn, s.ErrorLog)
 
-			// If the header wasn't written yet when the error occured we can
+			// If the header wasn't written yet when the error occurred we can
 			// attempt to keep using the connection, otherwise we abort to
 			// notify the client that something went wrong.
 			if res.status == 0 {
