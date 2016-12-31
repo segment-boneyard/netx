@@ -156,28 +156,6 @@ func resolveListen(address string, defaultProtoNetwork string, defaultProtoUnix 
 	return
 }
 
-// MultiAddr is used for compound listeners returned by MultiListener.
-type MultiAddr []net.Addr
-
-// Network returns a comma-separated list of the addresses networks.
-func (addr MultiAddr) Network() string {
-	s := make([]string, len(addr))
-	for i, a := range addr {
-		s[i] = a.Network()
-	}
-	return strings.Join(s, ",")
-}
-
-// String returns a comma-separated list of the addresses string
-// representations.
-func (addr MultiAddr) String() string {
-	s := make([]string, len(addr))
-	for i, a := range addr {
-		s[i] = a.String()
-	}
-	return strings.Join(s, ",")
-}
-
 // MultiListener returns a compound listener made of the given list of
 // listeners.
 func MultiListener(lstn ...net.Listener) net.Listener {
