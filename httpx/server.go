@@ -338,7 +338,11 @@ func (res *responseWriter) WriteHeader(status int) {
 	}
 	res.status = status
 
-	var b [32]byte
+	// The chunkWriter's buffer is unused for now, we'll use it to write the
+	// status line and avoid a couple of memory allocations (because byte
+	// slices sent to the bufio.Writer will be seen as escaping to the
+	// underlying io.Writer).
+	var b = res.cw.b[:0]
 	var c = res.conn
 	var h = res.header
 
@@ -355,14 +359,25 @@ func (res *responseWriter) WriteHeader(status int) {
 
 	h.Set("Date", now().Format(time.RFC1123))
 
-	c.WriteString(res.req.Proto)
-	c.WriteByte(' ')
-	c.WriteString(string(strconv.AppendInt(b[:0], int64(status), 10)))
-	c.WriteByte(' ')
-	c.WriteString(http.StatusText(status))
-	c.WriteString("\r\n")
-	h.Write(c)
-	_, res.err = c.WriteString("\r\n")
+	b = append(b, res.req.Proto...)
+	b = append(b, ' ')
+	b = strconv.AppendInt(b, int64(status), 10)
+	b = append(b, ' ')
+	b = append(b, http.StatusText(status)...)
+	b = append(b, '\r', '\n')
+
+	if _, err := c.Write(b); err != nil {
+		res.err = err
+		return
+	}
+	if err := h.Write(c); err != nil {
+		res.err = err
+		return
+	}
+	if _, err := c.WriteString("\r\n"); err != nil {
+		res.err = err
+		return
+	}
 }
 
 // Write satisfies the io.Writer and http.ResponseWriter interfaces.
