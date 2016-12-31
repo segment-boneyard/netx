@@ -47,8 +47,10 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Forwarded requests always use the HTTP/1.1 protocol when talking to the
 	// backend server.
+	// We disable a previous context that would have been set on the request so
+	// it doesn't get canceled in-flight while being forwarded to the backend.
 	outurl := *req.URL
-	outreq := *req
+	outreq := req.WithContext(context.Background())
 	outreq.URL = &outurl
 	outreq.Header = make(http.Header, len(req.Header))
 	outreq.Proto = "HTTP/1.1"
@@ -83,12 +85,12 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Decrement the Max-Forward header for TRACE and OPTIONS requests.
 	if method := req.Method; method == "TRACE" || method == "OPTIONS" {
-		max, err := maxForward(outreq.Header)
+		max, err := maxForwards(outreq.Header)
 		if max--; max == 0 || err != nil {
 			if method == "TRACE" {
-				p.serveTRACE(w, &outreq)
+				p.serveTRACE(w, outreq)
 			} else {
-				p.serveOPTIONS(w, &outreq)
+				p.serveOPTIONS(w, outreq)
 			}
 			return
 		}
@@ -101,9 +103,9 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if upgrade := connectionUpgrade(req.Header); len(upgrade) != 0 {
 		outreq.Header.Set("Connection", "Upgrade")
 		outreq.Header.Set("Upgrade", upgrade)
-		p.serveUpgrade(w, &outreq)
+		p.serveUpgrade(w, outreq)
 	} else {
-		p.serveHTTP(w, &outreq)
+		p.serveHTTP(w, outreq)
 	}
 }
 

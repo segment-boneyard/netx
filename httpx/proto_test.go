@@ -384,7 +384,7 @@ func TestAddVia(t *testing.T) {
 	}
 }
 
-func TestMaxForward(t *testing.T) {
+func TestMaxForwards(t *testing.T) {
 	tests := []struct {
 		in  http.Header
 		max int
@@ -394,14 +394,14 @@ func TestMaxForward(t *testing.T) {
 			max: -1,
 		},
 		{
-			in:  http.Header{"Max-Forward": {"42"}},
+			in:  http.Header{"Max-Forwards": {"42"}},
 			max: 42,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			max, err := maxForward(test.in)
+			max, err := maxForwards(test.in)
 
 			if err != nil {
 				t.Error(err)

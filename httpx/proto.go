@@ -147,9 +147,9 @@ func addHeaderValue(header http.Header, name string, value string) {
 	header.Set(name, value)
 }
 
-// maxForward returns the value of the Max-Forward header.
-func maxForward(header http.Header) (max int, err error) {
-	if s := header.Get("Max-Forward"); len(s) == 0 {
+// maxForwards returns the value of the Max-Forward header.
+func maxForwards(header http.Header) (max int, err error) {
+	if s := header.Get("Max-Forwards"); len(s) == 0 {
 		max = -1
 	} else {
 		max, err = strconv.Atoi(s)

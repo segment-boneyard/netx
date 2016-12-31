@@ -224,24 +224,28 @@ func newServerConn(conn net.Conn) *serverConn {
 	return c
 }
 
-func (conn *serverConn) Close() error {
-	if conn.f != nil {
-		conn.f.Close()
-	}
-	return conn.c.Close()
-}
-
 func (conn *serverConn) LocalAddr() net.Addr                { return conn.c.LocalAddr() }
 func (conn *serverConn) RemoteAddr() net.Addr               { return conn.c.RemoteAddr() }
 func (conn *serverConn) SetDeadline(t time.Time) error      { return conn.c.SetDeadline(t) }
 func (conn *serverConn) SetReadDeadline(t time.Time) error  { return conn.c.SetReadDeadline(t) }
 func (conn *serverConn) SetWriteDeadline(t time.Time) error { return conn.c.SetWriteDeadline(t) }
 
+func (conn *serverConn) Close() error {
+	conn.closeFile()
+	return conn.c.Close()
+}
+
+func (conn *serverConn) closeFile() {
+	if conn.f != nil {
+		conn.f.Close()
+	}
+}
+
 func (conn *serverConn) waitReadyRead(ctx context.Context, timeout time.Duration) (err error) {
-	if conn.f == nil {
-		err = pollRead(ctx, conn, &conn.Reader, timeout)
-	} else {
+	if conn.f != nil {
 		err = waitRead(ctx, conn.f, timeout)
+	} else {
+		err = pollRead(ctx, conn, &conn.Reader, timeout)
 	}
 	return
 }
@@ -297,13 +301,22 @@ type responseWriter struct {
 
 // Hijack satisfies the http.Hijacker interface.
 func (res *responseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err error) {
-	if res.conn == nil {
-		err = errHijacked
+	if res.err != nil {
+		err = res.err
 		return
 	}
 
-	conn, rw, err = res.conn, bufio.NewReadWriter(&res.conn.Reader, &res.conn.Writer), res.err
+	if res.chunked {
+		if err = res.cw.Flush(); err != nil {
+			res.err = err
+			return
+		}
+	}
+
+	conn, rw = res.conn.c.Conn, bufio.NewReadWriter(&res.conn.Reader, &res.conn.Writer)
+	res.conn.closeFile()
 	res.conn = nil
+	res.err = errHijacked
 
 	// Cancel all deadlines on the connection before returning it.
 	conn.SetDeadline(time.Time{})
