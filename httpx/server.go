@@ -509,11 +509,9 @@ func (res *chunkWriter) write(b []byte) (n int, err error) {
 	if _, err = res.w.Write(a); err != nil {
 		return
 	}
-
 	if n, err = res.w.Write(b); err != nil {
 		return
 	}
-
 	_, err = res.w.Write(a[len(a)-2:]) // CRLF
 	return
 }
