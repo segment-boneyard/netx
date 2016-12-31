@@ -3,6 +3,7 @@ package httpx
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -290,6 +291,7 @@ type responseWriter struct {
 	timeout time.Duration // timeout for the full write operation
 	err     error         // any error detected internally by the writer
 	remain  uint64        // the remaining number of bytes to write
+	hasBody bool          // true when the request method allows to send a response body
 	chunked bool          // true when the writer uses "Transfer-Encoding: chunked"
 	cw      chunkWriter   // chunk writer used with "Transfer-Encoding: chunked"
 }
@@ -332,6 +334,9 @@ func (res *responseWriter) WriteHeader(status int) {
 		status = http.StatusOK
 	}
 	res.status = status
+	res.hasBody = status >= 200 &&
+		status != http.StatusNoContent &&
+		status != http.StatusNotModified
 
 	// The chunkWriter's buffer is unused for now, we'll use it to write the
 	// status line and avoid a couple of memory allocations (because byte
@@ -345,17 +350,22 @@ func (res *responseWriter) WriteHeader(status int) {
 		c.SetWriteDeadline(time.Now().Add(timeout))
 	}
 
-	if s, hasLen := h["Content-Length"]; !hasLen {
-		h.Set("Transfer-Encoding", "chunked")
-		res.chunked = true
-		res.cw.w = res.conn
-		res.cw.n = 0
-	} else {
-		if res.remain, res.err = strconv.ParseUint(s[0], 10, 64); res.err != nil {
+	if res.hasBody {
+		if s, hasLen := h["Content-Length"]; !hasLen {
+			h.Set("Transfer-Encoding", "chunked")
+			res.chunked = true
+			res.cw.w = res.conn
+			res.cw.n = 0
+		} else if res.remain, res.err = strconv.ParseUint(s[0], 10, 64); res.err != nil {
 			// The program put an invalid value in Content-Length, that's a
 			// programming error.
-			panic("bad Content-Length: " + s[0])
+			res.err = errors.New("bad Content-Length: " + s[0])
+			return
 		}
+	} else {
+		// In case the application mistakenly added these.
+		h.Del("Transfer-Encoding")
+		h.Del("Content-Length")
 	}
 
 	if _, hasDate := h["Date"]; !hasDate {
@@ -388,16 +398,33 @@ func (res *responseWriter) Write(b []byte) (n int, err error) {
 	if err = res.err; err == nil {
 		res.WriteHeader(0)
 
+		if !res.hasBody {
+			err = http.ErrBodyNotAllowed
+			return
+		}
+
 		if res.chunked {
 			n, err = res.cw.Write(b)
 		} else {
-			if uint64(len(b)) > res.remain {
-				// The program sent more bytes that it declared in the
-				// Content-Length header.
-				panic(http.ErrContentLength)
-			}
-			if n, err = res.conn.Write(b); n > 0 {
-				res.remain -= uint64(n)
+			for len(b) != 0 && err == nil {
+				if res.remain == 0 {
+					// The program sent more bytes that it declared in the
+					// Content-Length header.
+					err = http.ErrContentLength
+					return
+				}
+
+				n1 := uint64(len(b))
+				n2 := res.remain
+
+				if n1 > n2 {
+					n1 = n2
+				}
+
+				if n, err = res.conn.Write(b[:int(n1)]); n > 0 {
+					b = b[n:]
+					res.remain -= uint64(n)
+				}
 			}
 		}
 
@@ -434,6 +461,7 @@ func (res *responseWriter) close() {
 
 func (res *responseWriter) reset(baseHeader http.Header) {
 	res.remain = 0
+	res.hasBody = false
 	res.chunked = false
 	res.cw.w = nil
 	res.cw.n = 0
