@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // AcceptItem is the representation of an item in an Accept header.
@@ -168,8 +169,109 @@ func ParseAccept(s string) (accept Accept, err error) {
 	return
 }
 
+// AcceptEncodingItem represents a single item in an Accept-Encoding header.
+type AcceptEncodingItem struct {
+	Coding string
+	Q      float32
+}
+
+// String satisfies the fmt.Stringer interface.
+func (item AcceptEncodingItem) String() string {
+	return fmt.Sprint(item)
+}
+
+// String satisfies the fmt.Stringer interface.
+func (item AcceptEncodingItem) Format(w fmt.State, _ rune) {
+	fmt.Fprint(w, "%s;q=%.1f", item.Coding, item.Q)
+}
+
+// ParseAcceptEncodingItem parses a single item in an Accept-Encoding header.
+func ParseAcceptEncodingItem(s string) (item AcceptEncodingItem, err error) {
+	if i := strings.IndexByte(s, ';'); i < 0 {
+		item.Coding = s
+	} else {
+		var p MediaParam
+
+		if p, err = ParseMediaParam(trimOWS(s[i+1:])); err != nil {
+			err = errorInvalidAcceptEncoding(s)
+			return
+		}
+
+		if p.Name != "q" {
+			err = errorInvalidAcceptEncoding(s)
+			return
+		}
+
+		item.Coding = s[:i]
+		item.Q = parseQ(p.Value)
+	}
+	if !isToken(item.Coding) {
+		err = errorInvalidAcceptEncoding(s)
+		return
+	}
+	return
+}
+
+// AcceptEncoding respresents an Accept-Encoding header.
+type AcceptEncoding []AcceptEncodingItem
+
+// String satisfies the fmt.Stringer interface.
+func (accept AcceptEncoding) String() string {
+	return fmt.Sprint(accept)
+}
+
+// Format satisfies the fmt.Formatter interface.
+func (accept AcceptEncoding) Format(w fmt.State, r rune) {
+	for i, item := range accept {
+		if i != 0 {
+			fmt.Fprint(w, ", ")
+		}
+		item.Format(w, r)
+	}
+}
+
+// Less satisfies sort.Interface.
+func (accept AcceptEncoding) Less(i int, j int) bool {
+	ai, aj := &accept[i], &accept[j]
+	return ai.Q < aj.Q || (ai.Q == aj.Q && ai.Coding < ai.Coding)
+}
+
+// Swap satisfies sort.Interface.
+func (accept AcceptEncoding) Swap(i int, j int) {
+	accept[i], accept[j] = accept[j], accept[i]
+}
+
+// Len satisfies sort.Interface.
+func (accept AcceptEncoding) Len() int {
+	return len(accept)
+}
+
+// ParseAcceptEncoding parses an Accept-Encoding header value from s.
+func ParseAcceptEncoding(s string) (accept AcceptEncoding, err error) {
+	var head string
+	var tail = s
+
+	for len(tail) != 0 {
+		var item AcceptEncodingItem
+		head, tail = splitTrimOWS(tail, ',')
+
+		if item, err = ParseAcceptEncodingItem(head); err != nil {
+			return
+		}
+
+		accept = append(accept, item)
+	}
+
+	sort.Sort(accept)
+	return
+}
+
 func errorInvalidAccept(s string) error {
 	return errors.New("invalid Accept header value: " + s)
+}
+
+func errorInvalidAcceptEncoding(s string) error {
+	return errors.New("invalid Accept-Encoding header value: " + s)
 }
 
 func parseQ(s string) float32 {
