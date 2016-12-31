@@ -9,6 +9,8 @@ import (
 	"net/http/httputil"
 	"strconv"
 	"time"
+
+	"github.com/segmentio/netx"
 )
 
 // ReverseProxy is a HTTP handler which implements the logic of a reverse HTTP
@@ -121,7 +123,7 @@ func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 	copyHeader(w.Header(), res.Header)
 
 	w.WriteHeader(res.StatusCode)
-	bufferedCopy(w, res.Body)
+	netx.Copy(w, res.Body)
 	res.Body.Close()
 
 	deleteHopFields(res.Trailer)
@@ -172,7 +174,7 @@ func (p *ReverseProxy) serveUpgrade(w http.ResponseWriter, req *http.Request) {
 	}
 	copyHeader(w.Header(), res.Header)
 	w.WriteHeader(res.StatusCode)
-	bufferedCopy(w, res.Body)
+	netx.Copy(w, res.Body)
 	res.Body.Close()
 
 	// Switching to a different protocol failed apparently, stopping here and
@@ -234,7 +236,7 @@ func guessScheme(localAddr string, remoteAddr string) string {
 // the copy completes.
 func forward(w io.Writer, r io.Reader, done chan<- struct{}) {
 	defer func() { done <- struct{}{} }()
-	io.Copy(w, r)
+	netx.Copy(w, r)
 }
 
 // requestLocalAddr looks for the request's local address in its context and

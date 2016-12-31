@@ -104,16 +104,16 @@ func quoteForwarded(addr string) string {
 		return addr
 	}
 	if netx.IsIPv6(addr) {
-		return strconv.Quote("[" + addr + "]")
+		return quote("[" + addr + "]")
 	}
-	return strconv.Quote(addr)
+	return quote(addr)
 }
 
 // mameForwarded builds a Forwarded header value from proto, forAddr, and byAddr.
 func makeForwarded(proto string, forAddr string, byAddr string) string {
 	s := make([]string, 0, 4)
 	if len(proto) != 0 {
-		s = append(s, "proto="+proto)
+		s = append(s, "proto="+quoted(proto).String())
 	}
 	if len(forAddr) != 0 {
 		s = append(s, "for="+quoteForwarded(forAddr))

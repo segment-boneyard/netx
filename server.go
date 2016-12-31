@@ -2,7 +2,6 @@ package netx
 
 import (
 	"context"
-	"io"
 	"log"
 	"net"
 	"runtime"
@@ -59,7 +58,7 @@ func (e *Echo) ServeConn(ctx context.Context, conn net.Conn) {
 		<-ctx.Done()
 		conn.Close()
 	}()
-	io.Copy(conn, conn)
+	Copy(conn, conn)
 }
 
 // A Server defines parameters for running servers that accept connections over

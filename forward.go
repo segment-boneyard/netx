@@ -1,7 +1,6 @@
 package netx
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net"
@@ -36,12 +35,5 @@ func (t *Forwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn)
 func (t *Forwarder) forward(from net.Conn, to net.Conn, join *sync.WaitGroup) {
 	defer join.Done()
 	defer to.Close()
-
-	buf := buffers.Get().(*bytes.Buffer)
-	io.CopyBuffer(to, from, buf.Bytes())
-	buffers.Put(buf)
-}
-
-var buffers = sync.Pool{
-	New: func() interface{} { return bytes.NewBuffer(make([]byte, 16384, 16384)) },
+	Copy(to, from)
 }
