@@ -116,7 +116,26 @@ func (accept Accept) Negotiate(types ...string) string {
 // Less satisfies sort.Interface.
 func (accept Accept) Less(i int, j int) bool {
 	ai, aj := &accept[i], &accept[j]
-	return (ai.Q > aj.Q) || (ai.Type != "*" && aj.Type == "*") || (ai.SubType != "*" && aj.SubType == "*")
+
+	if ai.Q > aj.Q {
+		return true
+	}
+
+	if ai.Q < aj.Q {
+		return false
+	}
+
+	if ai.Type == aj.Type && ai.SubType == aj.SubType {
+		n1 := len(ai.Params) + len(ai.Extensions)
+		n2 := len(aj.Params) + len(aj.Extensions)
+		return n1 > n2
+	}
+
+	if ai.Type != aj.Type {
+		return mediaTypeLess(ai.Type, aj.Type)
+	}
+
+	return mediaTypeLess(ai.SubType, aj.SubType)
 }
 
 // Swap satisfies sort.Interface.

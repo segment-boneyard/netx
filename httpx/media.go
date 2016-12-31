@@ -199,6 +199,19 @@ func ParseMediaType(s string) (t MediaType, err error) {
 	return
 }
 
+func mediaTypeLess(t1 string, t2 string) bool {
+	if t1 == t2 {
+		return false
+	}
+	if t1 == "*" {
+		return false
+	}
+	if t2 == "*" {
+		return true
+	}
+	return t1 < t2
+}
+
 func errorInvalidMediaParam(s string) error {
 	return errors.New("invalid media parameter: " + s)
 }

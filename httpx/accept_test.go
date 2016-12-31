@@ -134,6 +134,26 @@ func TestParseAcceptFailure(t *testing.T) {
 	}
 }
 
+func TestAcceptSort(t *testing.T) {
+	a, err := ParseAccept(`text/*, image/*;q=0.5, text/plain;q=1.0, text/html, text/html;level=1, */*`)
+
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if !reflect.DeepEqual(a, Accept{
+		{Type: "text", SubType: "html", Q: 1, Params: []MediaParam{{"level", "1"}}},
+		{Type: "text", SubType: "html", Q: 1},
+		{Type: "text", SubType: "plain", Q: 1},
+		{Type: "text", SubType: "*", Q: 1},
+		{Type: "*", SubType: "*", Q: 1},
+		{Type: "image", SubType: "*", Q: 0.5},
+	}) {
+		t.Error(a)
+	}
+}
+
 func TestAcceptNegotiate(t *testing.T) {
 	tests := []struct {
 		t []string

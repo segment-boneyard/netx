@@ -244,3 +244,55 @@ func TestMediaRangeParam(t *testing.T) {
 		t.Error("found non-existing media parameter:", p2)
 	}
 }
+
+func TestMediaTypeLess(t *testing.T) {
+	tests := []struct {
+		t1   string
+		t2   string
+		less bool
+	}{
+		{
+			t1:   "",
+			t2:   "",
+			less: false,
+		},
+		{
+			t1:   "*",
+			t2:   "*",
+			less: false,
+		},
+		{
+			t1:   "*",
+			t2:   "text",
+			less: false,
+		},
+		{
+			t1:   "text",
+			t2:   "*",
+			less: true,
+		},
+		{
+			t1:   "text",
+			t2:   "text",
+			less: false,
+		},
+		{
+			t1:   "plain",
+			t2:   "html",
+			less: false,
+		},
+		{
+			t1:   "html",
+			t2:   "plain",
+			less: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.t1+"<"+test.t2, func(t *testing.T) {
+			if less := mediaTypeLess(test.t1, test.t2); less != test.less {
+				t.Error(less)
+			}
+		})
+	}
+}
