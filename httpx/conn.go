@@ -55,8 +55,6 @@ func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err er
 	if err = req.Write(w); err != nil {
 		return
 	}
-	req.Body.Close()
-
 	if err = w.Flush(); err != nil {
 		return
 	}
@@ -68,11 +66,15 @@ func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err er
 		c.limit = limit
 	}
 
+	if timeout := t.ResponseHeaderTimeout; timeout != 0 {
+		c.SetReadDeadline(time.Now().Add(timeout))
+	}
 	if res, err = http.ReadResponse(r, req); err != nil {
 		return
 	}
 
 	c.limit = -1
+	c.SetReadDeadline(time.Time{})
 	return
 }
 
