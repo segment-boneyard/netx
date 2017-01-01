@@ -183,6 +183,12 @@ func (p *ReverseProxy) serveUpgrade(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// No need to keep references to these objects anymore, the GC may collect
+	// them if possible.
+	upgrade = nil
+	req = nil
+	res = nil
+
 	frontend, rw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
