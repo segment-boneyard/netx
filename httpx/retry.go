@@ -39,7 +39,7 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	body := &retryRequestBody{ReadCloser: req.Body}
 	req.Body = body
 
-	res := &retryResponseWriter{ResponseWriter: w, header: make(http.Header, 10)}
+	res := &retryResponseWriter{ResponseWriter: w}
 
 	max := h.MaxAttempts
 	if max == 0 {
@@ -47,6 +47,10 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	for attempt := 0; attempt < max; attempt++ {
+		res.status = 0
+		res.header = make(http.Header, 10)
+		res.buffer.Reset()
+
 		h.Handler.ServeHTTP(res, req)
 
 		if res.status < 500 {
@@ -68,13 +72,6 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if sleep(req.Context(), backoff(attempt)) != nil {
 			w.WriteHeader(http.StatusServiceUnavailable) // canceled
 			return
-		}
-
-		res.status = 0
-		res.buffer.Reset()
-
-		for field := range res.header {
-			delete(res.header, field)
 		}
 	}
 
@@ -161,10 +158,10 @@ func (w *retryResponseWriter) Header() http.Header {
 func (w *retryResponseWriter) WriteHeader(status int) {
 	if w.status == 0 {
 		w.status = status
-	}
-	if w.status < 500 {
-		copyHeader(w.ResponseWriter.Header(), w.header)
-		w.ResponseWriter.WriteHeader(status)
+		if status < 500 {
+			copyHeader(w.ResponseWriter.Header(), w.header)
+			w.ResponseWriter.WriteHeader(status)
+		}
 	}
 }
 
@@ -210,5 +207,5 @@ func sleep(ctx context.Context, d time.Duration) (err error) {
 		}
 		timer.Stop()
 	}
-	return nil
+	return
 }
