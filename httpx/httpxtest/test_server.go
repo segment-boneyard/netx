@@ -238,7 +238,7 @@ func testServerReadTimeout(t *testing.T, f MakeServer) {
 // test that the server properly closes connections when the client doesn't read
 // the response.
 func testServerWriteTimeout(t *testing.T, f MakeServer) {
-	b := make([]byte, 1<<20) // 512KB
+	b := make([]byte, 1<<22) // 4MB
 
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
