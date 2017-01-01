@@ -16,12 +16,6 @@ import (
 	"github.com/segmentio/netx"
 )
 
-const (
-	// DefaultMaxHeaderBytes is the default value used for limiting the size of
-	// HTTP request headers.
-	DefaultMaxHeaderBytes = 1048576
-)
-
 // A Server implements the netx.Handler interface, it provides the handling of
 // HTTP requests from a net.Conn, graceful shutdowns...
 type Server struct {
@@ -49,7 +43,7 @@ type Server struct {
 	// MaxHeaderBytes controls the maximum number of bytes the will read parsing
 	// the request header's keys and values, including the request line. It does
 	// not limit the size of the request body.
-	// If zero, DefaultMaxHeaderBytes is used.
+	// If zero, http.DefaultMaxHeaderBytes is used.
 	MaxHeaderBytes int
 
 	// ErrorLog specifies an optional logger for errors that occur when
@@ -66,7 +60,7 @@ type Server struct {
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 	maxHeaderBytes := s.MaxHeaderBytes
 	if maxHeaderBytes == 0 {
-		maxHeaderBytes = DefaultMaxHeaderBytes
+		maxHeaderBytes = http.DefaultMaxHeaderBytes
 	}
 
 	baseHeader := http.Header{

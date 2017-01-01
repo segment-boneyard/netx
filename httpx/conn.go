@@ -64,7 +64,7 @@ func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err er
 
 	switch limit := t.MaxResponseHeaderBytes; {
 	case limit == 0:
-		c.limit = DefaultMaxHeaderBytes
+		c.limit = http.DefaultMaxHeaderBytes
 	case limit > 0:
 		c.limit = limit
 	}
