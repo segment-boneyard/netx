@@ -1,6 +1,7 @@
 package httpxtest
 
 import (
+	"bufio"
 	"bytes"
 	"io"
 	"io/ioutil"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/segmentio/netx"
 )
 
 // ServerConfig is used to configure the HTTP server started by MakeServer.
@@ -38,6 +41,7 @@ func TestServer(t *testing.T, f MakeServer) {
 	run("ErrBodyNotAllowed", testServerErrBodyNotAllowed)
 	run("ErrContentLength", testServerErrContentLength)
 	run("ReadTimeout", testServerReadTimeout)
+	run("WriteTimeout", testServerWriteTimeout)
 }
 
 // tests that basic features of the http server are working as expected, setting
@@ -75,13 +79,13 @@ func testServerBasic(t *testing.T, f MakeServer) {
 // test that a chunked transfer encoding on the connection works as expected,
 // this is done by sending a huge payload via multiple calls to Write.
 func testServerTransferEncodingChunked(t *testing.T, f MakeServer) {
-	b := make([]byte, 1024)
+	b := make([]byte, 128)
 
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// No Content-Length is set, the server should be using
 			// "Transfer-Encoding: chunked" in the response.
-			for i := 0; i != 10; i++ {
+			for i := 0; i != 100; i++ {
 				if _, err := w.Write(b); err != nil {
 					t.Error(err)
 					return
@@ -106,7 +110,7 @@ func testServerTransferEncodingChunked(t *testing.T, f MakeServer) {
 	if res.StatusCode != http.StatusOK {
 		t.Error("bad response code:", res.StatusCode)
 	}
-	if r.N != (10 * len(b)) {
+	if r.N != (100 * len(b)) {
 		t.Error("bad response body length:", r.N)
 	}
 }
@@ -228,6 +232,56 @@ func testServerReadTimeout(t *testing.T, f MakeServer) {
 	var b [128]byte
 	if n, err := conn.Read(b[:]); err != io.EOF {
 		t.Errorf("expected io.EOF on the read operation but got %v (%d bytes)", err, n)
+	}
+}
+
+// test that the server properly closes connections when the client doesn't read
+// the response.
+func testServerWriteTimeout(t *testing.T, f MakeServer) {
+	b := make([]byte, 1<<20) // 512KB
+
+	url, close := f(ServerConfig{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if _, err := w.Write(b); !netx.IsTimeout(err) {
+				t.Error(err)
+			}
+		}),
+		WriteTimeout: 100 * time.Millisecond,
+	})
+	defer close()
+
+	conn, err := net.Dial("tcp", url[7:]) // trim "http://"
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	r := bufio.NewReader(conn)
+	w := bufio.NewWriter(conn)
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Write(w)
+
+	if err := w.Flush(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	// Wait so the server can timeout the request.
+	time.Sleep(200 * time.Millisecond)
+
+	res, err := http.ReadResponse(r, req)
+	if err != nil {
+		return // OK, nothing was sent
+	}
+
+	body := &countReader{R: res.Body}
+	io.Copy(ioutil.Discard, body)
+	res.Body.Close()
+
+	if body.N >= len(b) {
+		t.Errorf("the server shouldn't have been able to send the entire response body of %d bytes", body.N)
 	}
 }
 
