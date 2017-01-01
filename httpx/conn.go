@@ -21,6 +21,10 @@ type ConnTransport struct {
 	// I/O done on the connection.
 	Buffer *bufio.ReadWriter
 
+	// DialContext is used to open a connection when Conn is set to nil.
+	// If the function is nil the transport uses a default dialer.
+	DialContext func(context.Context, string, string) (net.Conn, error)
+
 	// ResponseHeaderTimeout, if non-zero, specifies the amount of time to wait
 	// for a server's response headers after fully writing the request (including
 	// its body, if any). This time does not include the time to read the response
@@ -34,9 +38,26 @@ type ConnTransport struct {
 	MaxResponseHeaderBytes int
 }
 
+// the default dialer used by ConnTransport when neither Conn nor DialContext is
+// set.
+var dialer net.Dialer
+
 // RoundTrip satisfies the http.RoundTripper interface.
 func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err error) {
-	var c = &connReader{Conn: t.Conn, limit: -1}
+	var ctx = req.Context()
+	var conn net.Conn
+	var dial func(context.Context, string, string) (net.Conn, error)
+
+	if conn = t.Conn; conn == nil {
+		if dial = t.DialContext; dial == nil {
+			dial = dialer.DialContext
+		}
+		if conn, err = dial(ctx, "tcp", req.Host); err != nil {
+			return
+		}
+	}
+
+	var c = &connReader{Conn: conn, limit: -1}
 	var b = t.Buffer
 	var r *bufio.Reader
 	var w *bufio.Writer
@@ -74,6 +95,16 @@ func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err er
 	}
 	if res, err = http.ReadResponse(r, req); err != nil {
 		return
+	}
+
+	if dial != nil {
+		res.Body = struct {
+			io.Reader
+			io.Closer
+		}{
+			Reader: res.Body,
+			Closer: conn,
+		}
 	}
 
 	c.limit = -1

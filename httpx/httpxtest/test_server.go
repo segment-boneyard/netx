@@ -27,7 +27,7 @@ type ServerConfig struct {
 // closer function to terminate the server.
 type MakeServer func(ServerConfig) (url string, close func())
 
-// TestServer is a test suite for HTTP servers, inspired from
+// TestServer is a test suite for HTTP servers, inspired by
 // golang.org/x/net/nettest.TestConn.
 func TestServer(t *testing.T, f MakeServer) {
 	run := func(name string, test func(*testing.T, MakeServer)) {
@@ -168,7 +168,7 @@ func testServerErrBodyNotAllowed(t *testing.T, f MakeServer) {
 			res.Body.Close()
 
 			if r.N != 0 {
-				t.Error("expected no body in the response but received %d bytes", r.N)
+				t.Errorf("expected no body in the response but received %d bytes", r.N)
 			}
 		})
 	}
@@ -185,7 +185,7 @@ func testServerErrContentLength(t *testing.T, f MakeServer) {
 			// The program writes too many bytes to the response, it must be
 			// notified by getting an error on the Write call.
 			if _, err := w.Write([]byte("Hello World!")); err != http.ErrContentLength {
-				t.Error("expected http.ErrContentLength but got %v", err)
+				t.Errorf("expected http.ErrContentLength but got %v", err)
 			}
 		}),
 	})
@@ -202,7 +202,7 @@ func testServerErrContentLength(t *testing.T, f MakeServer) {
 	res.Body.Close()
 
 	if r.N != 1 {
-		t.Error("expected at 1 byte in the response but received %d bytes", r.N)
+		t.Errorf("expected at 1 byte in the response but received %d bytes", r.N)
 	}
 }
 
