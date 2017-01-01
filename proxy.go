@@ -2,10 +2,8 @@ package netx
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net"
-	"os"
 )
 
 // ProxyHandler is an interface that must be implemented by types that intend to
@@ -70,32 +68,18 @@ type TransparentProxy struct {
 //
 // The method panics to report errors.
 func (p *TransparentProxy) ServeConn(ctx context.Context, conn net.Conn) {
-	socket, ok := conn.(File)
-	if !ok {
-		panic(errors.New("transparent proxies should be used with connection that implement netx.File"))
-	}
-
-	f, err := socket.File()
+	target, err := OriginalTargetAddr(conn)
 	if err != nil {
 		panic(err)
 	}
-
-	target, err := OriginalTargetAddr(f)
-	f.Close()
-
-	if err != nil {
-		panic(err)
-	}
-
 	p.Handler.ServeProxy(ctx, conn, target)
 }
 
-// OriginalTargetAddr returns the original address that an intercepted connection
-// intended to reach.
+// OriginalTargetAddr returns the original address that an intercepted
+// connection intended to reach.
 //
-// Note that this feature is only available for TCP connections on linux systems.
-//
-// The function panics if f is nil.
-func OriginalTargetAddr(f *os.File) (net.Addr, error) {
-	return originalTargetAddr(f.Fd())
+// Note that this feature is only available for TCP connections on linux,
+// the function always returns an error on other platforms.
+func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
+	return originalTargetAddr(conn)
 }

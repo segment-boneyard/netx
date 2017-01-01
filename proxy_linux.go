@@ -2,15 +2,28 @@ package netx
 
 import (
 	"net"
+	"os"
 	"syscall"
 	"unsafe"
 )
 
-func originalTargetAddr(sock uintptr) (n *net.TCPAddr, err error) {
+func originalTargetAddr(conn net.Conn) (n *net.TCPAddr, err error) {
 	const (
 		SO_ORIGINAL_DST = 80 // missing from the syscall package
 	)
 
+	// Calling conn.File will put the socket in blocking mode, we make sure to
+	// set it back to non-blocking before returning to prevent the runtime from
+	// creating tons of threads because it deals with blocking syscalls all over
+	// the place.
+	var f *os.File
+	if f, err = conn.File(); err != nil {
+		return
+	}
+	defer f.Close()
+	defer syscall.SetNonblock(f.Fd(), true)
+
+	sock := f.Fd()
 	addr := syscall.RawSockaddrAny{}
 	size := uint32(unsafe.Sizeof(addr))
 

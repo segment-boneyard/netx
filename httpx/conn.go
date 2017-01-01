@@ -2,10 +2,13 @@ package httpx
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/segmentio/netx"
 )
 
 // ConnTransport is a http.RoundTripper that works on a pre-established network
@@ -80,9 +83,14 @@ func (t *ConnTransport) RoundTrip(req *http.Request) (res *http.Response, err er
 
 // connReader is a net.Conn wrappers used by the HTTP server to limit the size
 // of the request header.
+//
+// A cancel function can also be set on the reader, it is expected to be used to
+// cancel the associated request context to notify the handlers that a client is
+// gone and the request can be aborted.
 type connReader struct {
 	net.Conn
-	limit int
+	limit  int
+	cancel context.CancelFunc
 }
 
 // Read satsifies the io.Reader interface.
@@ -101,6 +109,10 @@ func (c *connReader) Read(b []byte) (n int, err error) {
 
 	if n, err = c.Conn.Read(b[:n1]); n > 0 && n2 > 0 {
 		c.limit -= n
+	}
+
+	if err != nil && !netx.IsTemporary(err) {
+		c.cancel()
 	}
 
 	return

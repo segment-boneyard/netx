@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -79,7 +78,15 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		baseHeader.Set("Keep-Alive", fmt.Sprintf("timeout=%d", int(idleTimeout/time.Second)))
 	}
 
-	sc := newServerConn(conn)
+	// The request context is completely detached from the server's main context
+	// to allow in-flight request to be completed before terminating the server.
+	var reqctx context.Context
+	var cancel context.CancelFunc
+	reqctx = context.Background()
+	reqctx = context.WithValue(reqctx, http.LocalAddrContextKey, conn.LocalAddr())
+	reqctx, cancel = context.WithCancel(reqctx)
+
+	sc := newServerConn(conn, cancel)
 	defer sc.Close()
 
 	res := &responseWriter{
@@ -97,7 +104,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 		if err = sc.waitReadyRead(ctx, s.IdleTimeout); err != nil {
 			return
 		}
-		if req, err = sc.readRequest(ctx, maxHeaderBytes, s.ReadTimeout); err != nil {
+		if req, err = sc.readRequest(reqctx, maxHeaderBytes, s.ReadTimeout); err != nil {
 			return
 		}
 		res.req = req
@@ -206,45 +213,48 @@ func (s *Server) serveHTTP(w http.ResponseWriter, req *http.Request, conn net.Co
 // allocations.
 type serverConn struct {
 	c connReader
-	f *os.File
 	bufio.Reader
 	bufio.Writer
 }
 
-func newServerConn(conn net.Conn) *serverConn {
-	c := &serverConn{c: connReader{Conn: conn, limit: -1}}
+func newServerConn(conn net.Conn, cancel context.CancelFunc) *serverConn {
+	c := &serverConn{c: connReader{Conn: conn, limit: -1, cancel: cancel}}
 	c.Reader = *bufio.NewReader(&c.c)
-	c.Writer = *bufio.NewWriter(conn)
-	if f, ok := conn.(netx.File); ok {
-		c.f, _ = f.File()
-	}
+	c.Writer = *bufio.NewWriter(&c.c)
 	return c
 }
 
+func (conn *serverConn) Close() error                       { return conn.c.Close() }
 func (conn *serverConn) LocalAddr() net.Addr                { return conn.c.LocalAddr() }
 func (conn *serverConn) RemoteAddr() net.Addr               { return conn.c.RemoteAddr() }
 func (conn *serverConn) SetDeadline(t time.Time) error      { return conn.c.SetDeadline(t) }
 func (conn *serverConn) SetReadDeadline(t time.Time) error  { return conn.c.SetReadDeadline(t) }
 func (conn *serverConn) SetWriteDeadline(t time.Time) error { return conn.c.SetWriteDeadline(t) }
 
-func (conn *serverConn) Close() error {
-	conn.closeFile()
-	return conn.c.Close()
-}
-
-func (conn *serverConn) closeFile() {
-	if conn.f != nil {
-		conn.f.Close()
-	}
-}
-
 func (conn *serverConn) waitReadyRead(ctx context.Context, timeout time.Duration) (err error) {
-	if conn.f != nil {
-		err = waitRead(ctx, conn.f, timeout)
-	} else {
-		err = pollRead(ctx, conn, &conn.Reader, timeout)
+	deadline := time.Now().Add(timeout)
+	for {
+		conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+
+		if _, err = conn.Peek(1); err == nil {
+			return
+		}
+
+		if !netx.IsTimeout(err) {
+			return
+		}
+
+		if timeout != 0 && deadline.Before(time.Now()) {
+			err = netx.Timeout("i/o timeout waiting for an HTTP request")
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
-	return
 }
 
 func (conn *serverConn) readRequest(ctx context.Context, maxHeaderBytes int, timeout time.Duration) (req *http.Request, err error) {
@@ -261,16 +271,7 @@ func (conn *serverConn) readRequest(ctx context.Context, maxHeaderBytes int, tim
 	if req, err = http.ReadRequest(&conn.Reader); err != nil {
 		return
 	}
-
-	ctx = context.WithValue(ctx, http.LocalAddrContextKey, conn.LocalAddr())
 	req = req.WithContext(ctx)
-	req.RemoteAddr = conn.RemoteAddr().String()
-
-	// Remove the "close" and "keep-alive" Connection header values, these values
-	// are automatically handled by the server and reported in req.Close.
-	if h, ok := req.Header["Connection"]; ok {
-		req.Header["Connection"] = headerValuesRemoveTokens(h, "close", "keep-alive")
-	}
 
 	// Drop the size limit on the connection reader to let the request body
 	// go through.
@@ -311,7 +312,6 @@ func (res *responseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err er
 	}
 
 	conn, rw = res.conn.c.Conn, bufio.NewReadWriter(&res.conn.Reader, &res.conn.Writer)
-	res.conn.closeFile()
 	res.conn = nil
 	res.err = http.ErrHijacked
 

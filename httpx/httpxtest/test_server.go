@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -27,14 +28,20 @@ type MakeServer func(ServerConfig) (url string, close func())
 // golang.org/x/net/nettest.TestConn.
 func TestServer(t *testing.T, f MakeServer) {
 	run := func(name string, test func(*testing.T, MakeServer)) {
-		t.Run(name, func(t *testing.T) { test(t, f) })
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			test(t, f)
+		})
 	}
 	run("Basic", testServerBasic)
 	run("Transfer-Encoding:chunked", testServerTransferEncodingChunked)
 	run("ErrBodyNotAllowed", testServerErrBodyNotAllowed)
 	run("ErrContentLength", testServerErrContentLength)
+	run("ReadTimeout", testServerReadTimeout)
 }
 
+// tests that basic features of the http server are working as expected, setting
+// a content length and a response status should work fine.
 func testServerBasic(t *testing.T, f MakeServer) {
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -57,23 +64,29 @@ func testServerBasic(t *testing.T, f MakeServer) {
 	if err := res.Body.Close(); err != nil {
 		t.Error("error closing the response body:", err)
 	}
-
 	if res.StatusCode != http.StatusAccepted {
 		t.Error("bad response code:", res.StatusCode)
 	}
-
 	if s := buf.String(); s != "Hello World!" {
 		t.Error("bad response body:", s)
 	}
 }
 
+// test that a chunked transfer encoding on the connection works as expected,
+// this is done by sending a huge payload via multiple calls to Write.
 func testServerTransferEncodingChunked(t *testing.T, f MakeServer) {
+	b := make([]byte, 1024)
+
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// No Content-Length is set, the server should be using
 			// "Transfer-Encoding: chunked" in the response.
-			w.WriteHeader(http.StatusAccepted)
-			w.Write([]byte("Hello World!"))
+			for i := 0; i != 10; i++ {
+				if _, err := w.Write(b); err != nil {
+					t.Error(err)
+					return
+				}
+			}
 		}),
 	})
 	defer close()
@@ -84,22 +97,22 @@ func testServerTransferEncodingChunked(t *testing.T, f MakeServer) {
 		return
 	}
 
-	buf := &bytes.Buffer{}
-	buf.ReadFrom(res.Body)
+	r := &countReader{R: res.Body}
+	io.Copy(ioutil.Discard, r)
 
 	if err := res.Body.Close(); err != nil {
 		t.Error("error closing the response body:", err)
 	}
-
-	if res.StatusCode != http.StatusAccepted {
+	if res.StatusCode != http.StatusOK {
 		t.Error("bad response code:", res.StatusCode)
 	}
-
-	if s := buf.String(); s != "Hello World!" {
-		t.Error("bad response body:", s)
+	if r.N != (10 * len(b)) {
+		t.Error("bad response body length:", r.N)
 	}
 }
 
+// test that the server's response writer returns http.ErrBodyNotAllowed when
+// the program attempts to write a body on a response that doesn't allow one.
 func testServerErrBodyNotAllowed(t *testing.T, f MakeServer) {
 	tests := []struct {
 		reason  string
@@ -157,6 +170,9 @@ func testServerErrBodyNotAllowed(t *testing.T, f MakeServer) {
 	}
 }
 
+// test that the server's response writer returns http.ErrContentLength when the
+// program attempts to write more data in the response than it previously set on
+// the Content-Length header.
 func testServerErrContentLength(t *testing.T, f MakeServer) {
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -186,6 +202,36 @@ func testServerErrContentLength(t *testing.T, f MakeServer) {
 	}
 }
 
+// test that the server properly closes connections when reading a request takes
+// too much time.
+func testServerReadTimeout(t *testing.T, f MakeServer) {
+	url, close := f(ServerConfig{
+		Handler:     http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
+		ReadTimeout: 100 * time.Millisecond,
+	})
+	defer close()
+
+	conn, err := net.Dial("tcp", url[7:]) // trim "http://"
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	// Write the beginning of a request but doesn't terminate it, the server
+	// should timeout the connection after 100ms.
+	if _, err := conn.Write([]byte("GET / HTTP/1.1")); err != nil {
+		t.Error(err)
+		return
+	}
+
+	var b [128]byte
+	if n, err := conn.Read(b[:]); err != io.EOF {
+		t.Errorf("expected io.EOF on the read operation but got %v (%d bytes)", err, n)
+	}
+}
+
+// countReader is an io.Reader which counts how many bytes were read.
 type countReader struct {
 	R io.Reader
 	N int
