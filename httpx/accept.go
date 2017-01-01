@@ -194,22 +194,21 @@ func parseAcceptEncodingItem(s string) (item acceptEncodingItem, err error) {
 		var p mediaParam
 
 		if p, err = parseMediaParam(trimOWS(s[i+1:])); err != nil {
-			err = errorInvalidAcceptEncoding(s)
-			return
+			goto error
 		}
-
 		if p.name != "q" {
-			err = errorInvalidAcceptEncoding(s)
-			return
+			goto error
 		}
 
 		item.coding = s[:i]
 		item.q = q(p.value)
 	}
 	if !isToken(item.coding) {
-		err = errorInvalidAcceptEncoding(s)
-		return
+		goto error
 	}
+	return
+error:
+	err = errorInvalidAcceptEncoding(s)
 	return
 }
 

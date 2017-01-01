@@ -49,8 +49,7 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 	var mp []mediaParam
 
 	if i = strings.IndexByte(s, '/'); i < 0 {
-		err = errorInvalidMediaRange(s)
-		return
+		goto error
 	}
 
 	s1 = s[:i]
@@ -63,13 +62,10 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 	}
 
 	if !isToken(s1) {
-		err = errorInvalidMediaRange(s)
-		return
+		goto error
 	}
-
 	if !isToken(s2) {
-		err = errorInvalidMediaRange(s)
-		return
+		goto error
 	}
 
 	for len(s3) != 0 {
@@ -80,8 +76,7 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 		}
 
 		if p, err = parseMediaParam(trimOWS(s3[:i])); err != nil {
-			err = errorInvalidMediaParam(s)
-			return
+			goto error
 		}
 
 		mp = append(mp, p)
@@ -97,6 +92,9 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 		sub:    s2,
 		params: mp,
 	}
+	return
+error:
+	err = errorInvalidMediaRange(s)
 	return
 }
 
@@ -124,31 +122,32 @@ func (p mediaParam) Format(w fmt.State, _ rune) {
 // parseMediaParam parses a string representation of a HTTP media parameter
 // from s.
 func parseMediaParam(s string) (p mediaParam, err error) {
-	i := strings.IndexByte(s, '=')
+	var s1 string
+	var s2 string
+	var q quoted
+	var i = strings.IndexByte(s, '=')
 
 	if i < 0 {
-		err = errorInvalidMediaParam(s)
-		return
+		goto error
 	}
 
-	var s1 = s[:i]
-	var s2 = s[i+1:]
-	var q quoted
+	s1 = s[:i]
+	s2 = s[i+1:]
 
 	if !isToken(s1) {
-		err = errorInvalidMediaParam(s)
-		return
+		goto error
 	}
-
 	if q, err = parseQuoted(s2); err != nil {
-		err = errorInvalidMediaParam(s)
-		return
+		goto error
 	}
 
 	p = mediaParam{
 		name:  s1,
 		value: string(q),
 	}
+	return
+error:
+	err = errorInvalidMediaParam(s)
 	return
 }
 
@@ -177,25 +176,28 @@ func (t mediaType) Format(w fmt.State, _ rune) {
 
 // parseMediaType parses the media type in s.
 func parseMediaType(s string) (t mediaType, err error) {
-	i := strings.IndexByte(s, '/')
+	var s1 string
+	var s2 string
+	var i = strings.IndexByte(s, '/')
 
 	if i < 0 {
-		err = errorInvalidMediaType(s)
-		return
+		goto error
 	}
 
-	s1 := s[:i]
-	s2 := s[i+1:]
+	s1 = s[:i]
+	s2 = s[i+1:]
 
 	if !isToken(s1) || !isToken(s2) {
-		err = errorInvalidMediaType(s)
-		return
+		goto error
 	}
 
 	t = mediaType{
 		typ: s1,
 		sub: s2,
 	}
+	return
+error:
+	err = errorInvalidMediaType(s)
 	return
 }
 
