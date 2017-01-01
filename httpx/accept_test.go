@@ -28,11 +28,11 @@ func TestParseAcceptItemSuccess(t *testing.T) {
 		{
 			s: `text/html; param="Hello World!"; q=1.0; ext=value`,
 			a: acceptItem{
-				typ:        "text",
-				sub:        "html",
-				q:          1.0,
-				params:     []mediaParam{{"param", "Hello World!"}},
-				extensions: []mediaParam{{"ext", "value"}},
+				typ:    "text",
+				sub:    "html",
+				q:      1.0,
+				params: []mediaParam{{"param", "Hello World!"}},
+				extens: []mediaParam{{"ext", "value"}},
 			},
 		},
 	}
@@ -89,11 +89,11 @@ func TestParseAcceptSuccess(t *testing.T) {
 			s: `text/*; q=0, text/html; param="Hello World!"; q=1.0; ext=value`,
 			a: accept{
 				{
-					typ:        "text",
-					sub:        "html",
-					q:          1.0,
-					params:     []mediaParam{{"param", "Hello World!"}},
-					extensions: []mediaParam{{"ext", "value"}},
+					typ:    "text",
+					sub:    "html",
+					q:      1.0,
+					params: []mediaParam{{"param", "Hello World!"}},
+					extens: []mediaParam{{"ext", "value"}},
 				},
 				{
 					typ: "text",

@@ -10,11 +10,11 @@ import (
 
 // acceptItem is the representation of an item in an Accept header.
 type acceptItem struct {
-	typ        string
-	sub        string
-	q          float32
-	params     []mediaParam
-	extensions []mediaParam
+	typ    string
+	sub    string
+	q      float32
+	params []mediaParam
+	extens []mediaParam
 }
 
 // String satisfies the fmt.Stringer interface.
@@ -32,7 +32,7 @@ func (item acceptItem) Format(w fmt.State, _ rune) {
 
 	fmt.Fprintf(w, ";q=%.1f", item.q)
 
-	for _, e := range item.extensions {
+	for _, e := range item.extens {
 		fmt.Fprintf(w, ";%v", e)
 	}
 }
@@ -59,8 +59,8 @@ func parseAcceptItem(s string) (item acceptItem, err error) {
 			if item.params = r.params[:i]; len(item.params) == 0 {
 				item.params = nil
 			}
-			if item.extensions = r.params[i+1:]; len(item.extensions) == 0 {
-				item.extensions = nil
+			if item.extens = r.params[i+1:]; len(item.extens) == 0 {
+				item.extens = nil
 			}
 			break
 		}
@@ -127,8 +127,8 @@ func (accept accept) Less(i int, j int) bool {
 	}
 
 	if ai.typ == aj.typ && ai.sub == aj.sub {
-		n1 := len(ai.params) + len(ai.extensions)
-		n2 := len(aj.params) + len(aj.extensions)
+		n1 := len(ai.params) + len(ai.extens)
+		n2 := len(aj.params) + len(aj.extens)
 		return n1 > n2
 	}
 
