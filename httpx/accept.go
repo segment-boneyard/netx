@@ -8,59 +8,59 @@ import (
 	"strings"
 )
 
-// AcceptItem is the representation of an item in an Accept header.
-type AcceptItem struct {
-	Type       string
-	SubType    string
-	Q          float32
-	Params     []MediaParam
-	Extensions []MediaParam
+// acceptItem is the representation of an item in an Accept header.
+type acceptItem struct {
+	typ        string
+	sub        string
+	q          float32
+	params     []mediaParam
+	extensions []mediaParam
 }
 
 // String satisfies the fmt.Stringer interface.
-func (item AcceptItem) String() string {
+func (item acceptItem) String() string {
 	return fmt.Sprint(item)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (item AcceptItem) Format(w fmt.State, _ rune) {
-	fmt.Fprintf(w, "%s/%s", item.Type, item.SubType)
+func (item acceptItem) Format(w fmt.State, _ rune) {
+	fmt.Fprintf(w, "%s/%s", item.typ, item.sub)
 
-	for _, p := range item.Params {
+	for _, p := range item.params {
 		fmt.Fprintf(w, ";%v", p)
 	}
 
-	fmt.Fprintf(w, ";q=%.1f", item.Q)
+	fmt.Fprintf(w, ";q=%.1f", item.q)
 
-	for _, e := range item.Extensions {
+	for _, e := range item.extensions {
 		fmt.Fprintf(w, ";%v", e)
 	}
 }
 
-// ParseAcceptItem parses a single item in an Accept header.
-func ParseAcceptItem(s string) (item AcceptItem, err error) {
-	var r MediaRange
+// parseAcceptItem parses a single item in an Accept header.
+func parseAcceptItem(s string) (item acceptItem, err error) {
+	var r mediaRange
 
-	if r, err = ParseMediaRange(s); err != nil {
+	if r, err = parseMediaRange(s); err != nil {
 		err = errorInvalidAccept(s)
 		return
 	}
 
-	item = AcceptItem{
-		Type:    r.Type,
-		SubType: r.SubType,
-		Q:       1.0,
-		Params:  r.Params,
+	item = acceptItem{
+		typ:    r.typ,
+		sub:    r.sub,
+		q:      1.0,
+		params: r.params,
 	}
 
-	for i, p := range r.Params {
-		if p.Name == "q" {
-			item.Q = parseQ(p.Value)
-			if item.Params = r.Params[:i]; len(item.Params) == 0 {
-				item.Params = nil
+	for i, p := range r.params {
+		if p.name == "q" {
+			item.q = q(p.value)
+			if item.params = r.params[:i]; len(item.params) == 0 {
+				item.params = nil
 			}
-			if item.Extensions = r.Params[i+1:]; len(item.Extensions) == 0 {
-				item.Extensions = nil
+			if item.extensions = r.params[i+1:]; len(item.extensions) == 0 {
+				item.extensions = nil
 			}
 			break
 		}
@@ -69,16 +69,16 @@ func ParseAcceptItem(s string) (item AcceptItem, err error) {
 	return
 }
 
-// Accept is the representation of an Accept header.
-type Accept []AcceptItem
+// accept is the representation of an Accept header.
+type accept []acceptItem
 
 // String satisfies the fmt.Stringer interface.
-func (accept Accept) String() string {
+func (accept accept) String() string {
 	return fmt.Sprint(accept)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (accept Accept) Format(w fmt.State, r rune) {
+func (accept accept) Format(w fmt.State, r rune) {
 	for i, item := range accept {
 		if i != 0 {
 			fmt.Fprint(w, ", ")
@@ -92,19 +92,19 @@ func (accept Accept) Format(w fmt.State, r rune) {
 //
 // If none types match the method returns the first element in the list of
 // types.
-func (accept Accept) Negotiate(types ...string) string {
+func (accept accept) Negotiate(types ...string) string {
 	if len(types) == 0 {
 		return ""
 	}
 	for _, acc := range accept {
 		for _, typ := range types {
-			t2, err := ParseMediaType(typ)
+			t2, err := parseMediaType(typ)
 			if err != nil {
 				continue
 			}
-			t1 := MediaType{
-				Type:    acc.Type,
-				SubType: acc.SubType,
+			t1 := mediaType{
+				typ: acc.typ,
+				sub: acc.sub,
 			}
 			if t1.Contains(t2) {
 				return typ
@@ -115,50 +115,50 @@ func (accept Accept) Negotiate(types ...string) string {
 }
 
 // Less satisfies sort.Interface.
-func (accept Accept) Less(i int, j int) bool {
+func (accept accept) Less(i int, j int) bool {
 	ai, aj := &accept[i], &accept[j]
 
-	if ai.Q > aj.Q {
+	if ai.q > aj.q {
 		return true
 	}
 
-	if ai.Q < aj.Q {
+	if ai.q < aj.q {
 		return false
 	}
 
-	if ai.Type == aj.Type && ai.SubType == aj.SubType {
-		n1 := len(ai.Params) + len(ai.Extensions)
-		n2 := len(aj.Params) + len(aj.Extensions)
+	if ai.typ == aj.typ && ai.sub == aj.sub {
+		n1 := len(ai.params) + len(ai.extensions)
+		n2 := len(aj.params) + len(aj.extensions)
 		return n1 > n2
 	}
 
-	if ai.Type != aj.Type {
-		return mediaTypeLess(ai.Type, aj.Type)
+	if ai.typ != aj.typ {
+		return mediaTypeLess(ai.typ, aj.typ)
 	}
 
-	return mediaTypeLess(ai.SubType, aj.SubType)
+	return mediaTypeLess(ai.sub, aj.sub)
 }
 
 // Swap satisfies sort.Interface.
-func (accept Accept) Swap(i int, j int) {
+func (accept accept) Swap(i int, j int) {
 	accept[i], accept[j] = accept[j], accept[i]
 }
 
 // Len satisfies sort.Interface.
-func (accept Accept) Len() int {
+func (accept accept) Len() int {
 	return len(accept)
 }
 
-// ParseAccept parses the value of an Accept header from s.
-func ParseAccept(s string) (accept Accept, err error) {
+// parseAccept parses the value of an Accept header from s.
+func parseAccept(s string) (accept accept, err error) {
 	var head string
 	var tail = s
 
 	for len(tail) != 0 {
-		var item AcceptItem
+		var item acceptItem
 		head, tail = splitTrimOWS(tail, ',')
 
-		if item, err = ParseAcceptItem(head); err != nil {
+		if item, err = parseAcceptItem(head); err != nil {
 			return
 		}
 
@@ -169,60 +169,60 @@ func ParseAccept(s string) (accept Accept, err error) {
 	return
 }
 
-// AcceptEncodingItem represents a single item in an Accept-Encoding header.
-type AcceptEncodingItem struct {
-	Coding string
-	Q      float32
+// acceptEncodingItem represents a single item in an Accept-Encoding header.
+type acceptEncodingItem struct {
+	coding string
+	q      float32
 }
 
 // String satisfies the fmt.Stringer interface.
-func (item AcceptEncodingItem) String() string {
+func (item acceptEncodingItem) String() string {
 	return fmt.Sprint(item)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (item AcceptEncodingItem) Format(w fmt.State, _ rune) {
-	fmt.Fprintf(w, "%s;q=%.1f", item.Coding, item.Q)
+func (item acceptEncodingItem) Format(w fmt.State, _ rune) {
+	fmt.Fprintf(w, "%s;q=%.1f", item.coding, item.q)
 }
 
-// ParseAcceptEncodingItem parses a single item in an Accept-Encoding header.
-func ParseAcceptEncodingItem(s string) (item AcceptEncodingItem, err error) {
+// parseAcceptEncodingItem parses a single item in an Accept-Encoding header.
+func parseAcceptEncodingItem(s string) (item acceptEncodingItem, err error) {
 	if i := strings.IndexByte(s, ';'); i < 0 {
-		item.Coding = s
-		item.Q = 1.0
+		item.coding = s
+		item.q = 1.0
 	} else {
-		var p MediaParam
+		var p mediaParam
 
-		if p, err = ParseMediaParam(trimOWS(s[i+1:])); err != nil {
+		if p, err = parseMediaParam(trimOWS(s[i+1:])); err != nil {
 			err = errorInvalidAcceptEncoding(s)
 			return
 		}
 
-		if p.Name != "q" {
+		if p.name != "q" {
 			err = errorInvalidAcceptEncoding(s)
 			return
 		}
 
-		item.Coding = s[:i]
-		item.Q = parseQ(p.Value)
+		item.coding = s[:i]
+		item.q = q(p.value)
 	}
-	if !isToken(item.Coding) {
+	if !isToken(item.coding) {
 		err = errorInvalidAcceptEncoding(s)
 		return
 	}
 	return
 }
 
-// AcceptEncoding respresents an Accept-Encoding header.
-type AcceptEncoding []AcceptEncodingItem
+// acceptEncoding respresents an Accept-Encoding header.
+type acceptEncoding []acceptEncodingItem
 
 // String satisfies the fmt.Stringer interface.
-func (accept AcceptEncoding) String() string {
+func (accept acceptEncoding) String() string {
 	return fmt.Sprint(accept)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (accept AcceptEncoding) Format(w fmt.State, r rune) {
+func (accept acceptEncoding) Format(w fmt.State, r rune) {
 	for i, item := range accept {
 		if i != 0 {
 			fmt.Fprint(w, ", ")
@@ -232,31 +232,31 @@ func (accept AcceptEncoding) Format(w fmt.State, r rune) {
 }
 
 // Less satisfies sort.Interface.
-func (accept AcceptEncoding) Less(i int, j int) bool {
+func (accept acceptEncoding) Less(i int, j int) bool {
 	ai, aj := &accept[i], &accept[j]
-	return ai.Q > aj.Q || (ai.Q == aj.Q && mediaTypeLess(ai.Coding, aj.Coding))
+	return ai.q > aj.q || (ai.q == aj.q && mediaTypeLess(ai.coding, aj.coding))
 }
 
 // Swap satisfies sort.Interface.
-func (accept AcceptEncoding) Swap(i int, j int) {
+func (accept acceptEncoding) Swap(i int, j int) {
 	accept[i], accept[j] = accept[j], accept[i]
 }
 
 // Len satisfies sort.Interface.
-func (accept AcceptEncoding) Len() int {
+func (accept acceptEncoding) Len() int {
 	return len(accept)
 }
 
-// ParseAcceptEncoding parses an Accept-Encoding header value from s.
-func ParseAcceptEncoding(s string) (accept AcceptEncoding, err error) {
+// parseAcceptEncoding parses an Accept-Encoding header value from s.
+func parseAcceptEncoding(s string) (accept acceptEncoding, err error) {
 	var head string
 	var tail = s
 
 	for len(tail) != 0 {
-		var item AcceptEncodingItem
+		var item acceptEncodingItem
 		head, tail = splitTrimOWS(tail, ',')
 
-		if item, err = ParseAcceptEncodingItem(head); err != nil {
+		if item, err = parseAcceptEncodingItem(head); err != nil {
 			return
 		}
 
@@ -275,7 +275,7 @@ func errorInvalidAcceptEncoding(s string) error {
 	return errors.New("invalid Accept-Encoding header value: " + s)
 }
 
-func parseQ(s string) float32 {
+func q(s string) float32 {
 	q, _ := strconv.ParseFloat(s, 32)
 	return float32(q)
 }

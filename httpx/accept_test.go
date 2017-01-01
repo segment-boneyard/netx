@@ -8,38 +8,38 @@ import (
 func TestParseAcceptItemSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		a AcceptItem
+		a acceptItem
 	}{
 		{
 			s: `text/html`,
-			a: AcceptItem{
-				Type:    "text",
-				SubType: "html",
-				Q:       1.0,
+			a: acceptItem{
+				typ: "text",
+				sub: "html",
+				q:   1.0,
 			},
 		},
 		{
 			s: `text/*;q=0`,
-			a: AcceptItem{
-				Type:    "text",
-				SubType: "*",
+			a: acceptItem{
+				typ: "text",
+				sub: "*",
 			},
 		},
 		{
 			s: `text/html; param="Hello World!"; q=1.0; ext=value`,
-			a: AcceptItem{
-				Type:       "text",
-				SubType:    "html",
-				Q:          1.0,
-				Params:     []MediaParam{{"param", "Hello World!"}},
-				Extensions: []MediaParam{{"ext", "value"}},
+			a: acceptItem{
+				typ:        "text",
+				sub:        "html",
+				q:          1.0,
+				params:     []mediaParam{{"param", "Hello World!"}},
+				extensions: []mediaParam{{"ext", "value"}},
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.a.String(), func(t *testing.T) {
-			a, err := ParseAcceptItem(test.s)
+			a, err := parseAcceptItem(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -63,7 +63,7 @@ func TestParseAcceptItemFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if a, err := ParseAcceptItem(test.s); err == nil {
+			if a, err := parseAcceptItem(test.s); err == nil {
 				t.Error(a)
 			}
 		})
@@ -73,31 +73,31 @@ func TestParseAcceptItemFailure(t *testing.T) {
 func TestParseAcceptSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		a Accept
+		a accept
 	}{
 		{
 			s: `text/html`,
-			a: Accept{
+			a: accept{
 				{
-					Type:    "text",
-					SubType: "html",
-					Q:       1.0,
+					typ: "text",
+					sub: "html",
+					q:   1.0,
 				},
 			},
 		},
 		{
 			s: `text/*; q=0, text/html; param="Hello World!"; q=1.0; ext=value`,
-			a: Accept{
+			a: accept{
 				{
-					Type:       "text",
-					SubType:    "html",
-					Q:          1.0,
-					Params:     []MediaParam{{"param", "Hello World!"}},
-					Extensions: []MediaParam{{"ext", "value"}},
+					typ:        "text",
+					sub:        "html",
+					q:          1.0,
+					params:     []mediaParam{{"param", "Hello World!"}},
+					extensions: []mediaParam{{"ext", "value"}},
 				},
 				{
-					Type:    "text",
-					SubType: "*",
+					typ: "text",
+					sub: "*",
 				},
 			},
 		},
@@ -105,7 +105,7 @@ func TestParseAcceptSuccess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.a.String(), func(t *testing.T) {
-			a, err := ParseAccept(test.s)
+			a, err := parseAccept(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -127,7 +127,7 @@ func TestParseAcceptFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if a, err := ParseAccept(test.s); err == nil {
+			if a, err := parseAccept(test.s); err == nil {
 				t.Error(a)
 			}
 		})
@@ -135,20 +135,20 @@ func TestParseAcceptFailure(t *testing.T) {
 }
 
 func TestAcceptSort(t *testing.T) {
-	a, err := ParseAccept(`text/*, image/*;q=0.5, text/plain;q=1.0, text/html, text/html;level=1, */*`)
+	a, err := parseAccept(`text/*, image/*;q=0.5, text/plain;q=1.0, text/html, text/html;level=1, */*`)
 
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	if !reflect.DeepEqual(a, Accept{
-		{Type: "text", SubType: "html", Q: 1, Params: []MediaParam{{"level", "1"}}},
-		{Type: "text", SubType: "html", Q: 1},
-		{Type: "text", SubType: "plain", Q: 1},
-		{Type: "text", SubType: "*", Q: 1},
-		{Type: "*", SubType: "*", Q: 1},
-		{Type: "image", SubType: "*", Q: 0.5},
+	if !reflect.DeepEqual(a, accept{
+		{typ: "text", sub: "html", q: 1, params: []mediaParam{{"level", "1"}}},
+		{typ: "text", sub: "html", q: 1},
+		{typ: "text", sub: "plain", q: 1},
+		{typ: "text", sub: "*", q: 1},
+		{typ: "*", sub: "*", q: 1},
+		{typ: "image", sub: "*", q: 0.5},
 	}) {
 		t.Error(a)
 	}
@@ -189,16 +189,16 @@ func TestAcceptNegotiate(t *testing.T) {
 		},
 	}
 
-	a := Accept{
+	a := accept{
 		{
-			Type:    "application",
-			SubType: "msgpack",
-			Q:       1.0,
+			typ: "application",
+			sub: "msgpack",
+			q:   1.0,
 		},
 		{
-			Type:    "application",
-			SubType: "json",
-			Q:       0.5,
+			typ: "application",
+			sub: "json",
+			q:   0.5,
 		},
 	}
 
@@ -214,26 +214,26 @@ func TestAcceptNegotiate(t *testing.T) {
 func TestParseAcceptEncodingItemSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		a AcceptEncodingItem
+		a acceptEncodingItem
 	}{
 		{
 			s: `gzip`,
-			a: AcceptEncodingItem{
-				Coding: "gzip",
-				Q:      1.0,
+			a: acceptEncodingItem{
+				coding: "gzip",
+				q:      1.0,
 			},
 		},
 		{
 			s: `gzip;q=0`,
-			a: AcceptEncodingItem{
-				Coding: "gzip",
+			a: acceptEncodingItem{
+				coding: "gzip",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.a.String(), func(t *testing.T) {
-			a, err := ParseAcceptEncodingItem(test.s)
+			a, err := parseAcceptEncodingItem(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -258,7 +258,7 @@ func TestParseAcceptEncodingItemFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if a, err := ParseAcceptEncodingItem(test.s); err == nil {
+			if a, err := parseAcceptEncodingItem(test.s); err == nil {
 				t.Error(a)
 			}
 		})
@@ -268,22 +268,22 @@ func TestParseAcceptEncodingItemFailure(t *testing.T) {
 func TestParseAcceptEncodingSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		a AcceptEncoding
+		a acceptEncoding
 	}{
 		{
 			s: `gzip;q=1.0, *;q=0, identity; q=0.5`,
-			a: AcceptEncoding{
+			a: acceptEncoding{
 				{
-					Coding: "gzip",
-					Q:      1.0,
+					coding: "gzip",
+					q:      1.0,
 				},
 				{
-					Coding: "identity",
-					Q:      0.5,
+					coding: "identity",
+					q:      0.5,
 				},
 				{
-					Coding: "*",
-					Q:      0.0,
+					coding: "*",
+					q:      0.0,
 				},
 			},
 		},
@@ -291,7 +291,7 @@ func TestParseAcceptEncodingSuccess(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.a.String(), func(t *testing.T) {
-			a, err := ParseAcceptEncoding(test.s)
+			a, err := parseAcceptEncoding(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -314,7 +314,7 @@ func TestParseAcceptEncodingFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if a, err := ParseAcceptEncoding(test.s); err == nil {
+			if a, err := parseAcceptEncoding(test.s); err == nil {
 				t.Error(a)
 			}
 		})
