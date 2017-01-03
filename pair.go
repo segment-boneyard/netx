@@ -58,7 +58,7 @@ func TCPPair(network string) (nc1 *net.TCPConn, nc2 *net.TCPConn, err error) {
 }
 
 // UnixPair returns a pair of unix connections, each of them being the end of a
-// bidirection communication channel..
+// bidirection communication channel.
 func UnixPair() (uc1 *net.UnixConn, uc2 *net.UnixConn, err error) {
 	var fd1 int
 	var fd2 int
