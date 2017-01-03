@@ -12,10 +12,6 @@ func originalTargetAddr(conn net.Conn) (n *net.TCPAddr, err error) {
 		SO_ORIGINAL_DST = 80 // missing from the syscall package
 	)
 
-	type fileConn interface {
-		File() (*os.File, error)
-	}
-
 	// Calling conn.File will put the socket in blocking mode, we make sure to
 	// set it back to non-blocking before returning to prevent the runtime from
 	// creating tons of threads because it deals with blocking syscalls all over
