@@ -1,9 +1,11 @@
 package netx
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"syscall"
 )
 
@@ -97,5 +99,62 @@ func RecvUnixFile(socket *net.UnixConn) (file *os.File, err error) {
 	}
 
 	file = os.NewFile(uintptr(fds[0]), "")
+	return
+}
+
+// RecvUnixListener returns a new listener which accepts connection by reading
+// file descriptors from a unix domain socket.
+func RecvUnixListener(socket *net.UnixConn) net.Listener {
+	return recvUnixListener{socket}
+}
+
+type recvUnixListener struct {
+	socket *net.UnixConn
+}
+
+func (l recvUnixListener) Accept() (net.Conn, error) {
+	return RecvUnixConn(l.socket)
+}
+
+func (l recvUnixListener) Addr() net.Addr {
+	return l.socket.LocalAddr()
+}
+
+func (l recvUnixListener) Close() error {
+	return l.socket.Close()
+}
+
+// SendUnixHandler wraps handler so the connetions it receives will be sent back
+// to socket when they are closed.
+func SendUnixHandler(socket *net.UnixConn, handler Handler) Handler {
+	return sendUnixHandler{
+		handler: handler,
+		socket:  socket,
+	}
+}
+
+type sendUnixHandler struct {
+	handler Handler
+	socket  *net.UnixConn
+}
+
+func (h sendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
+	c := &sendUnixConn{Conn: conn}
+	defer c.Close()
+	h.handler.ServeConn(ctx, c)
+}
+
+type sendUnixConn struct {
+	net.Conn
+	once   sync.Once
+	socket *net.UnixConn
+}
+
+func (c *sendUnixConn) Close() (err error) {
+	c.once.Do(func() {
+		if err = SendUnixConn(c.socket, c.Conn); err != nil {
+			c.Conn.Close()
+		}
+	})
 	return
 }
