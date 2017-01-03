@@ -16,13 +16,13 @@ func TestSendRecvUnixConn(t *testing.T) {
 		var u1 *net.UnixConn
 		var u2 *net.UnixConn
 
-		if u1, u2, err = UnixPair(); err != nil {
+		if u1, u2, err = UnixConnPair(); err != nil {
 			return
 		}
 		defer u1.Close()
 		defer u2.Close()
 
-		if c1, c2, err = Pair("tcp"); err != nil {
+		if c1, c2, err = ConnPair("tcp"); err != nil {
 			return
 		}
 

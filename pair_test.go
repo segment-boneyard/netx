@@ -7,7 +7,7 @@ import (
 	"golang.org/x/net/nettest"
 )
 
-func TestPair(t *testing.T) {
+func TestConnPair(t *testing.T) {
 	for _, network := range [...]string{
 		"unix",
 		"tcp",
@@ -18,7 +18,7 @@ func TestPair(t *testing.T) {
 		t.Run(network, func(t *testing.T) {
 			t.Parallel()
 			nettest.TestConn(t, func() (c1 net.Conn, c2 net.Conn, stop func(), err error) {
-				if c1, c2, err = Pair(network); err == nil {
+				if c1, c2, err = ConnPair(network); err == nil {
 					stop = func() {
 						c1.Close()
 						c2.Close()

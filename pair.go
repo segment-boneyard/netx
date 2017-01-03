@@ -7,23 +7,23 @@ import (
 	"syscall"
 )
 
-// Pair returns a pair of connections, each of them being the end of a
+// ConnPair returns a pair of connections, each of them being the end of a
 // bidirectional communcation channel. network should be one of "tcp", "tcp4",
 // "tcp6", or "unix".
-func Pair(network string) (net.Conn, net.Conn, error) {
+func ConnPair(network string) (net.Conn, net.Conn, error) {
 	switch network {
 	case "unix":
-		return UnixPair()
+		return UnixConnPair()
 	case "tcp", "tcp4", "tcp6":
-		return TCPPair(network)
+		return TCPConnPair(network)
 	default:
 		return nil, nil, errors.New("unsupported network pair: " + network)
 	}
 }
 
-// TCPPair returns a pair of TCP connections, each of them being the end of a
+// TCPConnPair returns a pair of TCP connections, each of them being the end of a
 // bidirectional communication channel.
-func TCPPair(network string) (nc1 *net.TCPConn, nc2 *net.TCPConn, err error) {
+func TCPConnPair(network string) (nc1 *net.TCPConn, nc2 *net.TCPConn, err error) {
 	var lstn *net.TCPListener
 	var ch1 = make(chan error, 1)
 	var ch2 = make(chan *net.TCPConn, 1)
@@ -57,9 +57,9 @@ func TCPPair(network string) (nc1 *net.TCPConn, nc2 *net.TCPConn, err error) {
 	return
 }
 
-// UnixPair returns a pair of unix connections, each of them being the end of a
+// UnixConnPair returns a pair of unix connections, each of them being the end of a
 // bidirection communication channel.
-func UnixPair() (uc1 *net.UnixConn, uc2 *net.UnixConn, err error) {
+func UnixConnPair() (uc1 *net.UnixConn, uc2 *net.UnixConn, err error) {
 	var fd1 int
 	var fd2 int
 
