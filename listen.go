@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -12,7 +14,7 @@ import (
 //
 // The function accepts addresses that may be prefixed by a URL scheme to set
 // the protocol that will be used, supported protocols are tcp, tcp4, tcp6,
-// unix, and unixpacket.
+// unix, unixpacket, and fd.
 //
 // The address may contain a path to a file for unix sockets, a pair of an IP
 // address and port, a pair of a network interface name and port, or just port.
@@ -29,18 +31,19 @@ func Listen(address string) (lstn net.Listener, err error) {
 		"tcp6",
 		"unix",
 		"unixpacket",
+		"fd",
 	}); err != nil {
 		return
 	}
 
 	if len(addrs) == 1 {
-		return net.Listen(network, addrs[0])
+		return listen(network, addrs[0])
 	}
 
 	lstns := make([]net.Listener, 0, len(addrs))
 
 	for _, a := range addrs {
-		l, e := net.Listen(network, a)
+		l, e := listen(network, a)
 		if e != nil {
 			for _, l := range lstns {
 				l.Close()
@@ -54,7 +57,32 @@ func Listen(address string) (lstn net.Listener, err error) {
 	return
 }
 
-// ListenPacket is similar to Listen but returns a PacketConn, nad works with
+func listen(network string, address string) (lstn net.Listener, err error) {
+	if network == "fd" {
+		var fd int
+		var f *os.File
+		var c net.Conn
+
+		if fd, err = strconv.Atoi(address); err != nil {
+			err = errors.New("invalid file descriptor in fd://" + address)
+			return
+		} else if fd < 0 {
+			err = errors.New("invalid negative file descriptor in fd://" + address)
+			return
+		}
+
+		f = os.NewFile(uintptr(fd), network)
+		defer f.Close()
+
+		if c, err = net.FileConn(f); err != nil {
+			return
+		}
+		return RecvUnixListener(c.(*net.UnixConn)), nil
+	}
+	return net.Listen(network, address)
+}
+
+// ListenPacket is similar to Listen but returns a PacketConn, and works with
 // udp, udp4, udp6, ip, ip4, ip6, or unixdgram protocols.
 func ListenPacket(address string) (conn net.PacketConn, err error) {
 	var network string
@@ -99,6 +127,14 @@ func resolveListen(address string, defaultProtoNetwork string, defaultProtoUnix 
 			err = errors.New("unsupported protocol: " + address[:off])
 			return
 		}
+	}
+
+	if network == "fd" {
+		if _, err = strconv.Atoi(address); err != nil {
+			err = errors.New("expected file descriptor number with fd:// protocol but found " + address)
+		}
+		addrs = []string{address}
+		return
 	}
 
 	if host, port, err = net.SplitHostPort(address); err != nil {
