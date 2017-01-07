@@ -99,23 +99,45 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errf := func(err error, backoff time.Duration) {
-		logf := log.Printf
-		if s.ErrorLog != nil {
-			logf = s.ErrorLog.Printf
-		}
-		logf("Accept error: %v; retrying in %v", err, backoff)
-	}
-
 	go func(ctx context.Context) {
 		<-ctx.Done()
 		lstn.Close()
 	}(ctx)
 
+	const maxBackoff = 1 * time.Second
 	for {
 		var conn net.Conn
 
-		if conn, err = Accept(lstn, errf); err != nil {
+		for attempt := 0; true; attempt++ {
+			if conn, err = lstn.Accept(); err == nil {
+				break
+			}
+			if !IsTemporary(err) {
+				break
+			}
+
+			// Backoff strategy for handling temporary errors, this prevents from
+			// retrying too fast when errors like running out of file descriptors
+			// occur.
+			backoff := time.Duration(attempt*attempt) * 10 * time.Millisecond
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			if logger := s.ErrorLog; logger != nil {
+				logger.Printf("Accept error: %v; retrying in %v", err, backoff)
+			}
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				err = ctx.Err()
+				return
+			}
+		}
+
+		if err != nil {
+			if e := ctx.Err(); e != nil {
+				err = e
+			}
 			return
 		}
 
