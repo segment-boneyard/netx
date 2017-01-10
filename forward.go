@@ -12,9 +12,6 @@ type Forwarder struct{}
 
 // ServeTunnel satisfies the TunnelHandler interface.
 func (t *Forwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn) {
-	defer from.Close()
-	defer to.Close()
-
 	join := &sync.WaitGroup{}
 	join.Add(2)
 

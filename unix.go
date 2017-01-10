@@ -190,7 +190,7 @@ func (h *SendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 	defer func() {
 		if atomic.LoadUint32(&c.closed) == 0 {
 			if err := SendUnixConn(&h.socket, conn); err != nil {
-				panic(err)
+				panic(fmt.Errorf("sending connection back over unix domain socket: %s", err))
 			}
 		}
 	}()

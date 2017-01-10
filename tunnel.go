@@ -57,5 +57,6 @@ func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr)
 		panic(err)
 	}
 
+	defer to.Close()
 	t.Handler.ServeTunnel(ctx, from, to)
 }
