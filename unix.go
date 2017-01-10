@@ -134,45 +134,57 @@ func RecvUnixFile(socket *net.UnixConn) (file *os.File, err error) {
 
 // NewRecvUnixListener returns a new listener which accepts connection by
 // reading file descriptors from a unix domain socket.
-func NewRecvUnixListener(socket *net.UnixConn) net.Listener {
-	return recvUnixListener{socket}
+//
+// The function doesn't make a copy of socket, so the returned listener should
+// be considered the new owner of that object, which means closing the listener
+// will actually close the original socket (and vice versa).
+func NewRecvUnixListener(socket *net.UnixConn) *RecvUnixListener {
+	return &RecvUnixListener{*socket}
 }
 
-type recvUnixListener struct {
-	socket *net.UnixConn
+// RecvUnixListener is a listener which acceptes connections by reading file
+// descriptors from a unix domain socket.
+type RecvUnixListener struct {
+	socket net.UnixConn
 }
 
-func (l recvUnixListener) Accept() (net.Conn, error) {
-	return RecvUnixConn(l.socket)
+// Accept receives a file descriptor from the listener's unix domain socket.
+func (l *RecvUnixListener) Accept() (net.Conn, error) {
+	return RecvUnixConn(&l.socket)
 }
 
-func (l recvUnixListener) Addr() net.Addr {
+// Addr returns the address of the listener's unix domain socket.
+func (l *RecvUnixListener) Addr() net.Addr {
 	return l.socket.LocalAddr()
 }
 
-func (l recvUnixListener) Close() error {
+// Close closes the underlying unix domain socket.
+func (l *RecvUnixListener) Close() error {
 	return l.socket.Close()
 }
 
 // NewSendUnixHandler wraps handler so the connetions it receives will be sent
-// back to socket when they are closed.
-func NewSendUnixHandler(socket *net.UnixConn, handler Handler) Handler {
-	return &sendUnixHandler{
+// back to socket when handler returns without closing them.
+func NewSendUnixHandler(socket *net.UnixConn, handler Handler) *SendUnixHandler {
+	return &SendUnixHandler{
 		handler: handler,
-		socket:  socket,
+		socket:  *socket,
 	}
 }
 
-type sendUnixHandler struct {
+// SendUnixHandler is a connection handler which sends the connections it
+// handles back through a unix domain socket.
+type SendUnixHandler struct {
 	handler Handler
-	socket  *net.UnixConn
+	socket  net.UnixConn
 }
 
-func (h *sendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
+// ServeConn satisfies the Handler interface.
+func (h *SendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 	c := &sendUnixConn{Conn: conn}
 	defer func() {
 		if atomic.LoadUint32(&c.closed) == 0 {
-			SendUnixConn(h.socket, conn)
+			SendUnixConn(&h.socket, conn)
 		}
 	}()
 	h.handler.ServeConn(ctx, c)

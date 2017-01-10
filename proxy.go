@@ -306,7 +306,7 @@ func parseProxyProto(r io.Reader) (src net.Addr, dst net.Addr, buf []byte, local
 		b = b[len(signature):]
 
 		if version := b[0] >> 4; version != 2 {
-			err = fmt.Errorf("invalid proxy protocol version: %#d", version)
+			err = fmt.Errorf("invalid proxy protocol version: %#x", version)
 			return
 		}
 
