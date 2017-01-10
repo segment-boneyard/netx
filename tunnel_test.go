@@ -7,7 +7,7 @@ import (
 )
 
 func TestTunnel(t *testing.T) {
-	net1, addr1, close1 := listenAndServe(&Echo{})
+	net1, addr1, close1 := listenAndServe(Echo)
 	defer close1()
 
 	net2, addr2, close2 := listenAndServe(&Proxy{

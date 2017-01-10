@@ -163,6 +163,11 @@ func (l *RecvUnixListener) Close() error {
 	return l.socket.Close()
 }
 
+// UnixConn returns a pointer to the underlying unix domain socket.
+func (l *RecvUnixListener) UnixConn() *net.UnixConn {
+	return &l.socket
+}
+
 // NewSendUnixHandler wraps handler so the connetions it receives will be sent
 // back to socket when handler returns without closing them.
 func NewSendUnixHandler(socket *net.UnixConn, handler Handler) *SendUnixHandler {
@@ -184,10 +189,17 @@ func (h *SendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 	c := &sendUnixConn{Conn: conn}
 	defer func() {
 		if atomic.LoadUint32(&c.closed) == 0 {
-			SendUnixConn(&h.socket, conn)
+			if err := SendUnixConn(&h.socket, conn); err != nil {
+				panic(err)
+			}
 		}
 	}()
 	h.handler.ServeConn(ctx, c)
+}
+
+// UnixConn returns a pointer to the underlying unix domain socket.
+func (l *SendUnixHandler) UnixConn() *net.UnixConn {
+	return &l.socket
 }
 
 type sendUnixConn struct {

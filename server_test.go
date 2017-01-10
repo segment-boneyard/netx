@@ -57,7 +57,7 @@ func TestEchoServer(t *testing.T) {
 			server := &Server{
 				Addr:    test.address,
 				Context: ctx,
-				Handler: &Echo{},
+				Handler: Echo,
 			}
 
 			done := &sync.WaitGroup{}

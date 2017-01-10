@@ -48,19 +48,6 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 	f(ctx, conn)
 }
 
-// Echo is the implementation of a connection handler that simply sends what it
-// receives back to the client.
-type Echo struct{}
-
-// ServeConn satisfies the Handler interface.
-func (e *Echo) ServeConn(ctx context.Context, conn net.Conn) {
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
-	Copy(conn, conn)
-}
-
 // A Server defines parameters for running servers that accept connections over
 // TCP or unix domains.
 type Server struct {
@@ -123,9 +110,7 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 			if backoff > maxBackoff {
 				backoff = maxBackoff
 			}
-			if logger := s.ErrorLog; logger != nil {
-				logger.Printf("Accept error: %v; retrying in %v", err, backoff)
-			}
+			s.logf("Accept error: %v; retrying in %v", err, backoff)
 			select {
 			case <-time.After(backoff):
 			case <-ctx.Done():
@@ -158,15 +143,15 @@ func (s *Server) serve(ctx context.Context, conn net.Conn, join *sync.WaitGroup)
 	s.Handler.ServeConn(ctx, conn)
 }
 
+func (s *Server) logf(format string, args ...interface{}) {
+	logf(s.ErrorLog)(format, args...)
+}
+
 // Recover is intended to be used by servers that gracefully handle panics from
 // their handlers.
 func Recover(err interface{}, conn net.Conn, logger *log.Logger) {
 	addr := conn.RemoteAddr().String()
-	logf := log.Printf
-
-	if logger != nil {
-		logf = logger.Printf
-	}
+	logf := logf(logger)
 
 	if err == nil {
 		return
@@ -183,3 +168,27 @@ func Recover(err interface{}, conn net.Conn, logger *log.Logger) {
 	buf = buf[:runtime.Stack(buf, false)]
 	logf("panic serving %v: %v\n%s", addr, err, buf)
 }
+
+func logf(logger *log.Logger) func(string, ...interface{}) {
+	if logger == nil {
+		return log.Printf
+	}
+	return logger.Printf
+}
+
+var (
+	// Echo is the implementation of a connection handler that simply sends what
+	// it receives back to the client.
+	Echo Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		go func() {
+			<-ctx.Done()
+			conn.Close()
+		}()
+		Copy(conn, conn)
+	})
+
+	// Pass is the implementation of a connection that does nothing.
+	Pass Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		// do nothing
+	})
+)
