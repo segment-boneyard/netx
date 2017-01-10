@@ -106,11 +106,11 @@ func ListenPacket(address string) (conn net.PacketConn, err error) {
 		var f *os.File
 		var c net.Conn
 
-		if fd, err = strconv.Atoi(address); err != nil {
-			err = errors.New("invalid file descriptor in fd://" + address)
+		if fd, err = strconv.Atoi(addrs[0]); err != nil {
+			err = errors.New("invalid file descriptor in fd://" + addrs[0])
 			return
 		} else if fd < 0 {
-			err = errors.New("invalid negative file descriptor in fd://" + address)
+			err = errors.New("invalid negative file descriptor in fd://" + addrs[0])
 			return
 		}
 
