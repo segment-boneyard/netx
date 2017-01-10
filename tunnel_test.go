@@ -11,8 +11,7 @@ func TestTunnel(t *testing.T) {
 	defer close1()
 
 	net2, addr2, close2 := listenAndServe(&Proxy{
-		Network: net1,
-		Address: addr1,
+		Addr: &NetAddr{net1, addr1},
 		Handler: &Tunnel{
 			Handler: &Forwarder{},
 		},

@@ -34,21 +34,16 @@ func (f ProxyHandlerFunc) ServeProxy(ctx context.Context, conn net.Conn, target 
 // A Proxy is a connection handler that forwards its connections to a proxy
 // handler.
 type Proxy struct {
-	// Network and Address represent the target to which the proxy is forwarding
-	// connections.
-	Network string
-	Address string
-
 	// Handler is the proxy handler to which connetions are forwarded to.
 	Handler ProxyHandler
+
+	// Addr is the address to which connections are proxied.
+	Addr net.Addr
 }
 
 // ServeConn satsifies the Handler interface.
 func (p *Proxy) ServeConn(ctx context.Context, conn net.Conn) {
-	p.Handler.ServeProxy(ctx, conn, &NetAddr{
-		Net:  p.Network,
-		Addr: p.Address,
-	})
+	p.Handler.ServeProxy(ctx, conn, p.Addr)
 }
 
 // A TransparentProxy is a connection handler for intercepted connections.
@@ -83,7 +78,7 @@ func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
 	return originalTargetAddr(conn)
 }
 
-// ProxyProtoHandler is the implementation of a connection handler which speaks
+// ProxyProtocol is the implementation of a connection handler which speaks
 // the proxy protocol.
 //
 // When the handler receives a LOCAL connection it attempts to protomote its
@@ -93,12 +88,12 @@ func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
 // Version 1 and 2 are supported.
 //
 // http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt
-type ProxyProtoHandler struct {
+type ProxyProtocol struct {
 	Handler ProxyHandler
 }
 
 // ServeConn satisifies the Handler interface.
-func (p *ProxyProtoHandler) ServeConn(ctx context.Context, conn net.Conn) {
+func (p *ProxyProtocol) ServeConn(ctx context.Context, conn net.Conn) {
 	src, dst, buf, local, err := parseProxyProto(conn)
 
 	if err != nil {
