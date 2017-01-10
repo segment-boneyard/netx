@@ -119,6 +119,13 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 		}
 
 		if err != nil {
+			select {
+			default:
+			case <-ctx.Done():
+				// Don't report errors when the server stopped because its
+				// context was canceled.
+				err = nil
+			}
 			return
 		}
 
