@@ -24,10 +24,24 @@ type fileConn interface {
 // conn must be a *net.TCPConn or similar (providing a File method) or the
 // function will panic.
 func SendUnixConn(socket *net.UnixConn, conn net.Conn) (err error) {
-	var c = conn.(fileConn)
+	return sendUnixFileConn(socket, conn.(fileConn), conn)
+}
+
+// SendUnixPacketConn sends a file descriptor embedded in conn over the unix
+// domain socket.
+// On success conn is closed because the owner is now the process that received
+// the file descriptor.
+//
+// conn must be a *net.UDPConn or similar (providing a File method) or the
+// function will panic.
+func SendUnixPacketConn(socket *net.UnixConn, conn net.PacketConn) (err error) {
+	return sendUnixFileConn(socket, conn.(fileConn), conn)
+}
+
+func sendUnixFileConn(socket *net.UnixConn, conn fileConn, close io.Closer) (err error) {
 	var f *os.File
 
-	if f, err = c.File(); err != nil {
+	if f, err = conn.File(); err != nil {
 		return
 	}
 	defer f.Close()
@@ -36,7 +50,7 @@ func SendUnixConn(socket *net.UnixConn, conn net.Conn) (err error) {
 		return
 	}
 
-	conn.Close()
+	close.Close()
 	return
 }
 
@@ -64,6 +78,17 @@ func RecvUnixConn(socket *net.UnixConn) (conn net.Conn, err error) {
 	}
 	defer f.Close()
 	return net.FileConn(f)
+}
+
+// RecvUnixPacketConn receives a packet oriented network connection from a unix
+// domain socket.
+func RecvUnixPacketConn(socket *net.UnixConn) (conn net.PacketConn, err error) {
+	var f *os.File
+	if f, err = RecvUnixFile(socket); err != nil {
+		return
+	}
+	defer f.Close()
+	return net.FilePacketConn(f)
 }
 
 // RecvUnixFile receives a file descriptor from a unix domain socket.
@@ -107,9 +132,9 @@ func RecvUnixFile(socket *net.UnixConn) (file *os.File, err error) {
 	return
 }
 
-// RecvUnixListener returns a new listener which accepts connection by reading
-// file descriptors from a unix domain socket.
-func RecvUnixListener(socket *net.UnixConn) net.Listener {
+// NewRecvUnixListener returns a new listener which accepts connection by
+// reading file descriptors from a unix domain socket.
+func NewRecvUnixListener(socket *net.UnixConn) net.Listener {
 	return recvUnixListener{socket}
 }
 
@@ -129,9 +154,9 @@ func (l recvUnixListener) Close() error {
 	return l.socket.Close()
 }
 
-// SendUnixHandler wraps handler so the connetions it receives will be sent back
-// to socket when they are closed.
-func SendUnixHandler(socket *net.UnixConn, handler Handler) Handler {
+// NewSendUnixHandler wraps handler so the connetions it receives will be sent
+// back to socket when they are closed.
+func NewSendUnixHandler(socket *net.UnixConn, handler Handler) Handler {
 	return &sendUnixHandler{
 		handler: handler,
 		socket:  socket,

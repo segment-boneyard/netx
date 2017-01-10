@@ -77,13 +77,13 @@ func listen(network string, address string) (lstn net.Listener, err error) {
 		if c, err = net.FileConn(f); err != nil {
 			return
 		}
-		return RecvUnixListener(c.(*net.UnixConn)), nil
+		return NewRecvUnixListener(c.(*net.UnixConn)), nil
 	}
 	return net.Listen(network, address)
 }
 
 // ListenPacket is similar to Listen but returns a PacketConn, and works with
-// udp, udp4, udp6, ip, ip4, ip6, or unixdgram protocols.
+// udp, udp4, udp6, ip, ip4, ip6, unixdgram, or fd protocols.
 func ListenPacket(address string) (conn net.PacketConn, err error) {
 	var network string
 	var addrs []string
@@ -96,8 +96,33 @@ func ListenPacket(address string) (conn net.PacketConn, err error) {
 		"ip4",
 		"ip6",
 		"unixdgram",
+		"fd",
 	}); err != nil {
 		return
+	}
+
+	if network == "fd" {
+		var fd int
+		var f *os.File
+		var c net.Conn
+
+		if fd, err = strconv.Atoi(address); err != nil {
+			err = errors.New("invalid file descriptor in fd://" + address)
+			return
+		} else if fd < 0 {
+			err = errors.New("invalid negative file descriptor in fd://" + address)
+			return
+		}
+
+		f = os.NewFile(uintptr(fd), network)
+		defer f.Close()
+
+		if c, err = net.FileConn(f); err != nil {
+			return
+		}
+		u := c.(*net.UnixConn)
+		defer u.Close()
+		return RecvUnixPacketConn(u)
 	}
 
 	// TODO: listen on all addresses?
