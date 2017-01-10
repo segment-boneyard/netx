@@ -114,15 +114,11 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 			select {
 			case <-time.After(backoff):
 			case <-ctx.Done():
-				err = ctx.Err()
 				return
 			}
 		}
 
 		if err != nil {
-			if e := ctx.Err(); e != nil {
-				err = e
-			}
 			return
 		}
 
