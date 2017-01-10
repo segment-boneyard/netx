@@ -3,6 +3,7 @@ package netx
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -68,10 +69,14 @@ func RecvUnixConn(socket *net.UnixConn) (conn net.Conn, err error) {
 // RecvUnixFile receives a file descriptor from a unix domain socket.
 func RecvUnixFile(socket *net.UnixConn) (file *os.File, err error) {
 	var oob = make([]byte, syscall.CmsgSpace(4))
+	var oobn int
 	var msg []syscall.SocketControlMessage
 	var fds []int
 
-	if _, _, _, _, err = socket.ReadMsgUnix(nil, oob); err != nil {
+	if _, oobn, _, _, err = socket.ReadMsgUnix(nil, oob); err != nil {
+		return
+	} else if oobn == 0 {
+		err = io.EOF
 		return
 	}
 
