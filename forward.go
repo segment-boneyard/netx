@@ -2,7 +2,6 @@ package netx
 
 import (
 	"context"
-	"io"
 	"net"
 	"sync"
 )
@@ -10,13 +9,6 @@ import (
 // Forwarder is a tunnel handler that simply passes bytes between the two ends
 // of a tunnel.
 type Forwarder struct{}
-
-// CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a forwarder can be used as a fallback protocol in a TunnelProtoMux to
-// simply pass the bytes back and forth.
-func (t *Forwarder) CanRead(r io.Reader) bool {
-	return true
-}
 
 // ServeTunnel satisfies the TunnelHandler interface.
 func (t *Forwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn) {

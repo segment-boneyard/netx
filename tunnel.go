@@ -2,7 +2,6 @@ package netx
 
 import (
 	"context"
-	"io"
 	"net"
 	"time"
 )
@@ -37,12 +36,6 @@ type Tunnel struct {
 	// DialContext can be set to a dialing function to configure how the tunnel
 	// establishes new connections.
 	DialContext func(context.Context, string, string) (net.Conn, error)
-}
-
-// CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a tunnel can be used as a fallback protocol in a ProxyProtoMux.
-func (t *Tunnel) CanRead(r io.Reader) bool {
-	return true
 }
 
 // ServeProxy satisfies the ProxyHandler interface.

@@ -43,12 +43,6 @@ type Proxy struct {
 	Handler ProxyHandler
 }
 
-// CanRead satisfies the ProtoReader interface, always returns true. This means
-// that a proxy can be used as a fallback protocol in a ProtoMux.
-func (p *Proxy) CanRead(r io.Reader) bool {
-	return true
-}
-
 // ServeConn satsifies the Handler interface.
 func (p *Proxy) ServeConn(ctx context.Context, conn net.Conn) {
 	p.Handler.ServeProxy(ctx, conn, &NetAddr{
