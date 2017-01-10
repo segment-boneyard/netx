@@ -6,7 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"sync"
+	"sync/atomic"
 	"syscall"
 )
 
@@ -132,7 +132,7 @@ func (l recvUnixListener) Close() error {
 // SendUnixHandler wraps handler so the connetions it receives will be sent back
 // to socket when they are closed.
 func SendUnixHandler(socket *net.UnixConn, handler Handler) Handler {
-	return sendUnixHandler{
+	return &sendUnixHandler{
 		handler: handler,
 		socket:  socket,
 	}
@@ -143,23 +143,36 @@ type sendUnixHandler struct {
 	socket  *net.UnixConn
 }
 
-func (h sendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
+func (h *sendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 	c := &sendUnixConn{Conn: conn}
-	defer c.Close()
+	defer func() {
+		if atomic.LoadUint32(&c.closed) == 0 {
+			SendUnixConn(h.socket, conn)
+		}
+	}()
 	h.handler.ServeConn(ctx, c)
 }
 
 type sendUnixConn struct {
 	net.Conn
-	once   sync.Once
-	socket *net.UnixConn
+	closed uint32
 }
 
 func (c *sendUnixConn) Close() (err error) {
-	c.once.Do(func() {
-		if err = SendUnixConn(c.socket, c.Conn); err != nil {
-			c.Conn.Close()
-		}
-	})
+	atomic.StoreUint32(&c.closed, 1)
+	return c.Conn.Close()
+}
+
+func (c *sendUnixConn) Read(b []byte) (n int, err error) {
+	if n, err = c.Conn.Read(b); err != nil && !IsTemporary(err) {
+		atomic.StoreUint32(&c.closed, 1)
+	}
+	return
+}
+
+func (c *sendUnixConn) Write(b []byte) (n int, err error) {
+	if n, err = c.Conn.Write(b); err != nil && !IsTemporary(err) {
+		atomic.StoreUint32(&c.closed, 1)
+	}
 	return
 }
