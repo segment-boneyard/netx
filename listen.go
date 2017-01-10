@@ -162,6 +162,12 @@ func resolveListen(address string, defaultProtoNetwork string, defaultProtoUnix 
 		return
 	}
 
+	if strings.HasPrefix(address, ":") { // :port
+		network = defaultProtoNetwork
+		addrs = []string{address}
+		return
+	}
+
 	if host, port, err = net.SplitHostPort(address); err != nil {
 		err = nil
 
