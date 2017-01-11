@@ -7,38 +7,56 @@ import (
 )
 
 func TestTunnel(t *testing.T) {
-	net1, addr1, close1 := listenAndServe(Echo)
-	defer close1()
-
-	net2, addr2, close2 := listenAndServe(&Proxy{
-		Addr: &NetAddr{net1, addr1},
-		Handler: &Tunnel{
-			Handler: &Forwarder{},
+	tests := []struct {
+		name   string
+		tunnel TunnelHandler
+	}{
+		{
+			name:   "TunnelRaw",
+			tunnel: TunnelRaw,
 		},
-	})
-	defer close2()
-
-	conn, err := net.Dial(net2, addr2)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer conn.Close()
-
-	if _, err := io.WriteString(conn, "Hello World!"); err != nil {
-		t.Error(err)
-		return
+		{
+			name:   "TunnelLine",
+			tunnel: TunnelLine,
+		},
 	}
 
-	b := [12]byte{}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			addr1, close1 := listenAndServe(Echo)
+			defer close1()
 
-	if _, err := io.ReadFull(conn, b[:]); err != nil {
-		t.Error(err)
-		return
-	}
+			addr2, close2 := listenAndServe(&Proxy{
+				Addr: addr1,
+				Handler: &Tunnel{
+					Handler: test.tunnel,
+				},
+			})
+			defer close2()
 
-	if s := string(b[:]); s != "Hello World!" {
-		t.Error(s)
-		return
+			conn, err := net.Dial(addr2.Network(), addr2.String())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+
+			if _, err := io.WriteString(conn, "Hello World!\r\n"); err != nil {
+				t.Error(err)
+				return
+			}
+
+			b := [14]byte{}
+
+			if _, err := io.ReadFull(conn, b[:]); err != nil {
+				t.Error(err)
+				return
+			}
+
+			if s := string(b[:]); s != "Hello World!\r\n" {
+				t.Error(s)
+				return
+			}
+		})
 	}
 }

@@ -54,7 +54,6 @@ func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr)
 	}
 
 	to, err := dial(ctx, target.Network(), target.String())
-
 	if err != nil {
 		panic(err)
 	}
@@ -64,6 +63,15 @@ func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr)
 }
 
 var (
+	// TunnelRaw is the implementation of a tunnel handler which passes bytes
+	// back and forth between the two ends of a tunnel.
+	//
+	// The implementation supports cancelltations and closes the connections
+	// before it returns (because it doesn't know anything about the underlying
+	// protocol being spoken and could leave the connections in an unreusable
+	// state).
+	TunnelRaw TunnelHandler = TunnelHandlerFunc(tunnelRaw)
+
 	// TunnelLine is the implementation of a tunnel handler which speaks a line
 	// based protocol like TELNET, expecting the client not to send more than
 	// one line before getting a response.
@@ -74,6 +82,21 @@ var (
 	// The maximum line length is limited to 8192 bytes.
 	TunnelLine TunnelHandler = TunnelHandlerFunc(tunnelLine)
 )
+
+func tunnelRaw(ctx context.Context, from net.Conn, to net.Conn) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	copy := func(w io.Writer, r io.Reader) {
+		defer cancel()
+		Copy(w, r)
+	}
+
+	go copy(to, from)
+	go copy(from, to)
+
+	<-ctx.Done()
+	from.Close()
+}
 
 func tunnelLine(ctx context.Context, from net.Conn, to net.Conn) {
 	r1 := bufio.NewReaderSize(from, 8192)

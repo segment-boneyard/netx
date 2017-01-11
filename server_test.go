@@ -18,12 +18,12 @@ func TestServerConn(t *testing.T) {
 		cnch := make(chan net.Conn)
 		done := make(chan struct{})
 
-		n, a, f := listenAndServe(HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		a, f := listenAndServe(HandlerFunc(func(ctx context.Context, conn net.Conn) {
 			cnch <- conn
 			<-done
 		}))
 
-		if c1, err = net.Dial(n, a); err != nil {
+		if c1, err = net.Dial(a.Network(), a.String()); err != nil {
 			return
 		}
 
@@ -109,19 +109,29 @@ func TestEchoServer(t *testing.T) {
 	}
 }
 
-func listenAndServe(h Handler) (net string, addr string, close func()) {
+func listenAndServe(h Handler) (addr net.Addr, close func()) {
 	lstn, err := Listen("127.0.0.1:0")
 	if err != nil {
 		panic(err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go (&Server{
-		Handler:  h,
-		Context:  ctx,
-		ErrorLog: log.New(os.Stderr, "listen: ", 0),
-	}).Serve(lstn)
 
-	net, addr, close = lstn.Addr().Network(), lstn.Addr().String(), cancel
+	join := &sync.WaitGroup{}
+	join.Add(1)
+
+	go func() {
+		defer join.Done()
+		(&Server{
+			Handler:  h,
+			Context:  ctx,
+			ErrorLog: log.New(os.Stderr, "listen: ", 0),
+		}).Serve(lstn)
+	}()
+
+	addr, close = lstn.Addr(), func() {
+		cancel()
+		join.Wait()
+	}
 	return
 }
