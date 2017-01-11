@@ -1,7 +1,6 @@
 package netx
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -10,7 +9,7 @@ import (
 // BaseConn returns the base connection object of conn.
 //
 // The function works by dynamically checking whether conn implements the
-// `Base() net.Conn` method, recursing dynamically to find the root connection
+// `BaseConn() net.Conn` method, recursing dynamically to find the root connection
 // object.
 func BaseConn(conn net.Conn) net.Conn {
 	type base interface {
@@ -21,6 +20,26 @@ func BaseConn(conn net.Conn) net.Conn {
 		var b base
 		if b, ok = conn.(base); ok {
 			conn = b.Base()
+		}
+	}
+
+	return conn
+}
+
+// BaseConn returns the base connection object of conn.
+//
+// The function works by dynamically checking whether conn implements the
+// `BasePacketConn() net.PacketConn` method, recursing dynamically to find the root connection
+// object.
+func BasePacketConn(conn net.PacketConn) net.PacketConn {
+	type base interface {
+		BasePacket() net.PacketConn
+	}
+
+	for ok := true; ok; {
+		var b base
+		if b, ok = conn.(base); ok {
+			conn = b.BasePacket()
 		}
 	}
 
@@ -41,7 +60,6 @@ type readCloser interface {
 
 func closeRead(c io.Closer) error {
 	if rc, ok := c.(readCloser); ok {
-		fmt.Println("close read:", c)
 		return rc.CloseRead()
 	}
 	return c.Close()

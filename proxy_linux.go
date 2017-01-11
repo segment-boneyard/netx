@@ -17,7 +17,7 @@ func originalTargetAddr(conn net.Conn) (n *net.TCPAddr, err error) {
 	// creating tons of threads because it deals with blocking syscalls all over
 	// the place.
 	var f *os.File
-	if f, err = conn.(fileConn).File(); err != nil {
+	if f, err = BaseConn(conn).(fileConn).File(); err != nil {
 		return
 	}
 	defer f.Close()

@@ -123,6 +123,10 @@ type proxyProtoConn struct {
 	buf []byte
 }
 
+func (c *proxyProtoConn) Base() net.Conn {
+	return c.Conn
+}
+
 func (c *proxyProtoConn) RemoteAddr() net.Addr {
 	return c.src
 }

@@ -18,7 +18,7 @@ import (
 // conn must be a *net.TCPConn or similar (providing a File method) or the
 // function will panic.
 func SendUnixConn(socket *net.UnixConn, conn net.Conn) (err error) {
-	return sendUnixFileConn(socket, conn.(fileConn), conn)
+	return sendUnixFileConn(socket, BaseConn(conn).(fileConn), conn)
 }
 
 // SendUnixPacketConn sends a file descriptor embedded in conn over the unix
@@ -29,7 +29,7 @@ func SendUnixConn(socket *net.UnixConn, conn net.Conn) (err error) {
 // conn must be a *net.UDPConn or similar (providing a File method) or the
 // function will panic.
 func SendUnixPacketConn(socket *net.UnixConn, conn net.PacketConn) (err error) {
-	return sendUnixFileConn(socket, conn.(fileConn), conn)
+	return sendUnixFileConn(socket, BasePacketConn(conn).(fileConn), conn)
 }
 
 func sendUnixFileConn(socket *net.UnixConn, conn fileConn, close io.Closer) (err error) {
@@ -198,6 +198,10 @@ func (c *SendUnixHandler) UnixConn() *net.UnixConn {
 type sendUnixConn struct {
 	net.Conn
 	closed uint32
+}
+
+func (c *sendUnixConn) Base() net.Conn {
+	return c.Conn
 }
 
 func (c *sendUnixConn) Close() (err error) {
