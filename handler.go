@@ -3,6 +3,8 @@ package netx
 import (
 	"bufio"
 	"context"
+	"errors"
+	"io"
 	"net"
 	"time"
 )
@@ -32,16 +34,14 @@ var (
 	// Echo is the implementation of a connection handler that simply sends what
 	// it receives back to the client.
 	Echo Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
-		go func() {
-			<-ctx.Done()
-			conn.Close()
-		}()
-		Copy(conn, conn)
+		go Copy(conn, conn)
+		<-ctx.Done()
+		conn.Close()
 	})
 
-	// EchoLine is the implementation of a connection handler that reads '\n'
-	// terminated lines and echos them back to the client, expecting the client
-	// not to send more than one line before getting it echoed back.
+	// EchoLine is the implementation of a connection handler that reads lines
+	// and echos them back to the client, expecting the client not to send more
+	// than one line before getting it echoed back.
 	//
 	// The implementation supports cancellations and ensures that no partial
 	// lines are read from the connection.
@@ -50,34 +50,24 @@ var (
 	EchoLine Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
 		r := bufio.NewReaderSize(conn, 8192)
 
+		fatal := func(err error) {
+			conn.Close()
+			panic(err)
+		}
+
 		for {
-			select {
+			line, err := readLine(ctx, conn, r)
+
+			switch err {
+			case nil:
+			case io.EOF, context.Canceled:
+				return
 			default:
-			case <-ctx.Done():
-				return
-			}
-
-			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-
-			if _, err := r.Peek(1); err != nil {
-				if IsTimeout(err) {
-					continue
-				}
-			}
-
-			line, prefix, err := r.ReadLine()
-
-			if prefix || err != nil {
-				conn.Close()
-				return
-			}
-
-			if line = line[:len(line)+1]; line[len(line)-1] == '\r' {
-				line = line[:len(line)+1]
+				fatal(err)
 			}
 
 			if _, err := conn.Write(line); err != nil {
-				return
+				fatal(err)
 			}
 		}
 	})
@@ -87,3 +77,38 @@ var (
 		// do nothing
 	})
 )
+
+func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, error) {
+	for {
+		select {
+		default:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+
+		conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+
+		if _, err := r.Peek(1); err != nil {
+			if IsTimeout(err) {
+				continue
+			}
+		}
+
+		line, prefix, err := r.ReadLine()
+
+		switch {
+		case prefix:
+			line, err = nil, errors.New("the line is too long")
+		case err != nil:
+			line = nil
+		case r.Buffered() != 0:
+			line, err = nil, errors.New("pipelining is not supported")
+		default:
+			if line = line[:len(line)+1]; line[len(line)-1] == '\r' {
+				line = line[:len(line)+1]
+			}
+		}
+
+		return line, err
+	}
+}
