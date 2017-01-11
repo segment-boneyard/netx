@@ -12,17 +12,12 @@ import (
 // `BaseConn() net.Conn` method, recursing dynamically to find the root connection
 // object.
 func BaseConn(conn net.Conn) net.Conn {
-	type base interface {
-		Base() net.Conn
-	}
-
 	for ok := true; ok; {
-		var b base
-		if b, ok = conn.(base); ok {
-			conn = b.Base()
+		var b baseConn
+		if b, ok = conn.(baseConn); ok {
+			conn = b.BaseConn()
 		}
 	}
-
 	return conn
 }
 
@@ -32,18 +27,25 @@ func BaseConn(conn net.Conn) net.Conn {
 // `BasePacketConn() net.PacketConn` method, recursing dynamically to find the root connection
 // object.
 func BasePacketConn(conn net.PacketConn) net.PacketConn {
-	type base interface {
-		BasePacket() net.PacketConn
-	}
-
 	for ok := true; ok; {
-		var b base
-		if b, ok = conn.(base); ok {
-			conn = b.BasePacket()
+		var b basePacketConn
+		if b, ok = conn.(basePacketConn); ok {
+			conn = b.BasePacketConn()
 		}
 	}
-
 	return conn
+}
+
+// baseConn is an interface implemented by connection wrappers wanting to expose
+// the underlying net.Conn object they use.
+type baseConn interface {
+	BaseConn() net.Conn
+}
+
+// basePacketConn is an interface implemented by connection wrappers wanting to
+// expose the underlying net.PacketConn object they use.
+type basePacketConn interface {
+	BasePacketConn() net.PacketConn
 }
 
 // fileConn is used internally to figure out if a net.Conn value also exposes a
