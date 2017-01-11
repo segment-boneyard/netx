@@ -88,7 +88,7 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 
 	go func(ctx context.Context) {
 		<-ctx.Done()
-		lstn.Close()
+		closeRead(lstn)
 	}(ctx)
 
 	const maxBackoff = 1 * time.Second

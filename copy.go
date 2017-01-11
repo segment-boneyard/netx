@@ -29,8 +29,6 @@ func Copy(w io.Writer, r io.Reader) (n int64, err error) {
 // allocation when converting the byte slice to an interface{}.
 type buffer struct{ b []byte }
 
-var (
-	bufferPool = sync.Pool{
-		New: func() interface{} { return &buffer{make([]byte, 8192, 8192)} },
-	}
-)
+var bufferPool = sync.Pool{
+	New: func() interface{} { return &buffer{make([]byte, 8192, 8192)} },
+}

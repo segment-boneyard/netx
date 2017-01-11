@@ -10,12 +10,6 @@ import (
 	"syscall"
 )
 
-// fileConn is used internally to figure out if a net.Conn value also exposes a
-// File method.
-type fileConn interface {
-	File() (*os.File, error)
-}
-
 // SendUnixConn sends a file descriptor embedded in conn over the unix domain
 // socket.
 // On success conn is closed because the owner is now the process that received
@@ -187,19 +181,18 @@ type SendUnixHandler struct {
 // ServeConn satisfies the Handler interface.
 func (h *SendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 	c := &sendUnixConn{Conn: conn}
-	defer func() {
-		if atomic.LoadUint32(&c.closed) == 0 {
-			if err := SendUnixConn(&h.socket, conn); err != nil {
-				panic(fmt.Errorf("sending connection back over unix domain socket: %s", err))
-			}
-		}
-	}()
 	h.handler.ServeConn(ctx, c)
+
+	if atomic.LoadUint32(&c.closed) == 0 {
+		if err := SendUnixConn(&h.socket, conn); err != nil {
+			panic(fmt.Errorf("sending connection back over unix domain socket: %s", err))
+		}
+	}
 }
 
 // UnixConn returns a pointer to the underlying unix domain socket.
-func (l *SendUnixHandler) UnixConn() *net.UnixConn {
-	return &l.socket
+func (c *SendUnixHandler) UnixConn() *net.UnixConn {
+	return &c.socket
 }
 
 type sendUnixConn struct {
@@ -210,18 +203,4 @@ type sendUnixConn struct {
 func (c *sendUnixConn) Close() (err error) {
 	atomic.StoreUint32(&c.closed, 1)
 	return c.Conn.Close()
-}
-
-func (c *sendUnixConn) Read(b []byte) (n int, err error) {
-	if n, err = c.Conn.Read(b); err != nil && !IsTemporary(err) {
-		atomic.StoreUint32(&c.closed, 1)
-	}
-	return
-}
-
-func (c *sendUnixConn) Write(b []byte) (n int, err error) {
-	if n, err = c.Conn.Write(b); err != nil && !IsTemporary(err) {
-		atomic.StoreUint32(&c.closed, 1)
-	}
-	return
 }

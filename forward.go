@@ -23,6 +23,5 @@ func (t *Forwarder) ServeTunnel(ctx context.Context, from net.Conn, to net.Conn)
 
 func (t *Forwarder) forward(from net.Conn, to net.Conn, join *sync.WaitGroup) {
 	defer join.Done()
-	defer to.Close()
 	Copy(to, from)
 }
