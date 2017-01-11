@@ -1,6 +1,9 @@
 package netx
 
-import "net"
+import (
+	"errors"
+	"net"
+)
 
 // Timeout returns a new network error representing a timeout.
 func Timeout(msg string) net.Error { return &timeout{msg} }
@@ -26,3 +29,13 @@ func IsTimeout(err error) bool {
 	})
 	return ok && e != nil && e.Timeout()
 }
+
+var (
+	// ErrLineTooLong should be used by line-based protocol readers that detect
+	// a line longer than they were configured to handle.
+	ErrLineTooLong = errors.New("the line is too long")
+
+	// ErrNoPipeline should be used by handlers that detect an attempt to use
+	// pipelining when they don't support it.
+	ErrNoPipeline = errors.New("pipelining is not supported")
+)

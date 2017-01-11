@@ -3,9 +3,7 @@ package netx
 import (
 	"bufio"
 	"context"
-	"errors"
 	"io"
-	"log"
 	"net"
 	"time"
 )
@@ -36,16 +34,6 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 func CloseHandler(handler Handler) Handler {
 	return HandlerFunc(func(ctx context.Context, conn net.Conn) {
 		defer conn.Close()
-		handler.ServeConn(ctx, conn)
-	})
-}
-
-// ErrorHandler wraps handler to catch panics and prints them with logger.
-//
-// If logger is nil the default logger is used instead.
-func ErrorHandler(logger *log.Logger, handler Handler) Handler {
-	return HandlerFunc(func(ctx context.Context, conn net.Conn) {
-		defer func() { Recover(recover(), conn, logger) }()
 		handler.ServeConn(ctx, conn)
 	})
 }
@@ -144,13 +132,3 @@ func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, erro
 		return line, err
 	}
 }
-
-var (
-	// ErrLineTooLong should be used by line-based protocol readers that detect
-	// a line longer than they were configured to handle.
-	ErrLineTooLong = errors.New("the line is too long")
-
-	// ErrNoPipeline should be used by handlers that detect an attempt to use
-	// pipelining when they don't support it.
-	ErrNoPipeline = errors.New("pipelining is not supported")
-)
