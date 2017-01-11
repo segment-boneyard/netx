@@ -1,7 +1,6 @@
 package netx
 
 import (
-	"io"
 	"net"
 	"os"
 )
@@ -52,17 +51,4 @@ type basePacketConn interface {
 // File method.
 type fileConn interface {
 	File() (*os.File, error)
-}
-
-// readCloser is an interface implemented by connections that can be closed only
-// on their read end.
-type readCloser interface {
-	CloseRead() error
-}
-
-func closeRead(c io.Closer) error {
-	if rc, ok := c.(readCloser); ok {
-		return rc.CloseRead()
-	}
-	return c.Close()
 }
