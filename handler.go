@@ -72,11 +72,6 @@ func echo(ctx context.Context, conn net.Conn) {
 func echoLine(ctx context.Context, conn net.Conn) {
 	r := bufio.NewReaderSize(conn, 8192)
 
-	fatal := func(err error) {
-		conn.Close()
-		panic(err)
-	}
-
 	for {
 		line, err := readLine(ctx, conn, r)
 
@@ -85,17 +80,22 @@ func echoLine(ctx context.Context, conn net.Conn) {
 		case io.EOF, context.Canceled:
 			return
 		default:
-			fatal(err)
+			fatal(conn, err)
 		}
 
 		if _, err := conn.Write(line); err != nil {
-			fatal(err)
+			fatal(conn, err)
 		}
 	}
 }
 
 func pass(ctx context.Context, conn net.Conn) {
 	// do nothing
+}
+
+func fatal(conn net.Conn, err error) {
+	conn.Close()
+	panic(err)
 }
 
 func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, error) {

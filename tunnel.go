@@ -79,11 +79,6 @@ func tunnelLine(ctx context.Context, from net.Conn, to net.Conn) {
 	r1 := bufio.NewReaderSize(from, 8192)
 	r2 := bufio.NewReaderSize(to, 8192)
 
-	fatal := func(err error) {
-		from.Close()
-		panic(err)
-	}
-
 	for {
 		line, err := readLine(ctx, from, r1)
 
@@ -92,19 +87,19 @@ func tunnelLine(ctx context.Context, from net.Conn, to net.Conn) {
 		case io.EOF, context.Canceled:
 			return
 		default:
-			fatal(err)
+			fatal(from, err)
 		}
 
 		if _, err := to.Write(line); err != nil {
-			fatal(err)
+			fatal(from, err)
 		}
 
 		if line, err = readLine(context.Background(), to, r2); err != nil {
-			fatal(err)
+			fatal(from, err)
 		}
 
 		if _, err := from.Write(line); err != nil {
-			fatal(err)
+			fatal(from, err)
 		}
 	}
 }
