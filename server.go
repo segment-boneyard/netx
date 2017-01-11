@@ -1,6 +1,7 @@
 package netx
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"net"
@@ -221,6 +222,49 @@ var (
 			conn.Close()
 		}()
 		Copy(conn, conn)
+	})
+
+	// EchoLine is the implementation of a connection handler that reads '\n'
+	// terminated lines and echos them back to the client, expecting the client
+	// not to send more than one line before getting it echoed back.
+	//
+	// The implementation supports cancellations and ensures that no partial
+	// lines are read from the connection.
+	//
+	// The maximum line length is limited to 8192 bytes.
+	EchoLine Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		r := bufio.NewReaderSize(conn, 8192)
+
+		for {
+			select {
+			default:
+			case <-ctx.Done():
+				return
+			}
+
+			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+
+			if _, err := r.Peek(1); err != nil {
+				if IsTimeout(err) {
+					continue
+				}
+			}
+
+			line, prefix, err := r.ReadLine()
+
+			if prefix || err != nil {
+				conn.Close()
+				return
+			}
+
+			if line = line[:len(line)+1]; line[len(line)-1] == '\r' {
+				line = line[:len(line)+1]
+			}
+
+			if _, err := conn.Write(line); err != nil {
+				return
+			}
+		}
 	})
 
 	// Pass is the implementation of a connection that does nothing.
