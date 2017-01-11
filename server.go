@@ -153,23 +153,21 @@ func (s *Server) logf(format string, args ...interface{}) {
 // Recover is intended to be used by servers that gracefully handle panics from
 // their handlers.
 func Recover(err interface{}, conn net.Conn, logger *log.Logger) {
-	addr := conn.RemoteAddr().String()
-	logf := logf(logger)
-
 	if err == nil {
 		return
 	}
 
-	if e, ok := err.(error); ok {
-		logf("error serving %v: %v", addr, e)
-		return
-	}
+	logf := logf(logger)
+	laddr := conn.LocalAddr()
+	raddr := conn.RemoteAddr()
 
-	// Copied from https://golang.org/src/net/http/server.go
-	const size = 64 << 10
-	buf := make([]byte, size)
-	buf = buf[:runtime.Stack(buf, false)]
-	logf("panic serving %v: %v\n%s", addr, err, buf)
+	if e, ok := err.(error); ok {
+		logf("error serving %s->%s: %v", laddr, raddr, e)
+	} else {
+		buf := make([]byte, 262144)
+		buf = buf[:runtime.Stack(buf, false)]
+		logf("panic serving %s->%s: %v\n%s", laddr, raddr, err, string(buf))
+	}
 }
 
 func logf(logger *log.Logger) func(string, ...interface{}) {
