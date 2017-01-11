@@ -66,7 +66,7 @@ func (t *Tunnel) ServeProxy(ctx context.Context, from net.Conn, target net.Addr)
 var (
 	// TunnelLine is the implementation of a tunnel handler which speaks a line
 	// based protocol like TELNET, expecting the client not to send more than
-	// one line before getting it echoed back.
+	// one line before getting a response.
 	//
 	// The implementation supports cancellations and ensures that no partial
 	// lines are read from the connection.
