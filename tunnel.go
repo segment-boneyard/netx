@@ -72,37 +72,39 @@ var (
 	// lines are read from the connection.
 	//
 	// The maximum line length is limited to 8192 bytes.
-	TunnelLine TunnelHandler = TunnelHandlerFunc(func(ctx context.Context, from net.Conn, to net.Conn) {
-		r1 := bufio.NewReaderSize(from, 8192)
-		r2 := bufio.NewReaderSize(to, 8192)
-
-		fatal := func(err error) {
-			from.Close()
-			panic(err)
-		}
-
-		for {
-			line, err := readLine(ctx, from, r1)
-
-			switch err {
-			case nil:
-			case io.EOF, context.Canceled:
-				return
-			default:
-				fatal(err)
-			}
-
-			if _, err := to.Write(line); err != nil {
-				fatal(err)
-			}
-
-			if line, err = readLine(context.Background(), to, r2); err != nil {
-				fatal(err)
-			}
-
-			if _, err := from.Write(line); err != nil {
-				fatal(err)
-			}
-		}
-	})
+	TunnelLine TunnelHandler = TunnelHandlerFunc(tunnelLine)
 )
+
+func tunnelLine(ctx context.Context, from net.Conn, to net.Conn) {
+	r1 := bufio.NewReaderSize(from, 8192)
+	r2 := bufio.NewReaderSize(to, 8192)
+
+	fatal := func(err error) {
+		from.Close()
+		panic(err)
+	}
+
+	for {
+		line, err := readLine(ctx, from, r1)
+
+		switch err {
+		case nil:
+		case io.EOF, context.Canceled:
+			return
+		default:
+			fatal(err)
+		}
+
+		if _, err := to.Write(line); err != nil {
+			fatal(err)
+		}
+
+		if line, err = readLine(context.Background(), to, r2); err != nil {
+			fatal(err)
+		}
+
+		if _, err := from.Write(line); err != nil {
+			fatal(err)
+		}
+	}
+}

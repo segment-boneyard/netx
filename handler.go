@@ -33,11 +33,7 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 var (
 	// Echo is the implementation of a connection handler that simply sends what
 	// it receives back to the client.
-	Echo Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
-		go Copy(conn, conn)
-		<-ctx.Done()
-		conn.Close()
-	})
+	Echo Handler = HandlerFunc(echo)
 
 	// EchoLine is the implementation of a connection handler that reads lines
 	// and echos them back to the client, expecting the client not to send more
@@ -47,36 +43,46 @@ var (
 	// lines are read from the connection.
 	//
 	// The maximum line length is limited to 8192 bytes.
-	EchoLine Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
-		r := bufio.NewReaderSize(conn, 8192)
-
-		fatal := func(err error) {
-			conn.Close()
-			panic(err)
-		}
-
-		for {
-			line, err := readLine(ctx, conn, r)
-
-			switch err {
-			case nil:
-			case io.EOF, context.Canceled:
-				return
-			default:
-				fatal(err)
-			}
-
-			if _, err := conn.Write(line); err != nil {
-				fatal(err)
-			}
-		}
-	})
+	EchoLine Handler = HandlerFunc(echoLine)
 
 	// Pass is the implementation of a connection that does nothing.
-	Pass Handler = HandlerFunc(func(ctx context.Context, conn net.Conn) {
-		// do nothing
-	})
+	Pass Handler = HandlerFunc(pass)
 )
+
+func echo(ctx context.Context, conn net.Conn) {
+	go Copy(conn, conn)
+	<-ctx.Done()
+	conn.Close()
+}
+
+func echoLine(ctx context.Context, conn net.Conn) {
+	r := bufio.NewReaderSize(conn, 8192)
+
+	fatal := func(err error) {
+		conn.Close()
+		panic(err)
+	}
+
+	for {
+		line, err := readLine(ctx, conn, r)
+
+		switch err {
+		case nil:
+		case io.EOF, context.Canceled:
+			return
+		default:
+			fatal(err)
+		}
+
+		if _, err := conn.Write(line); err != nil {
+			fatal(err)
+		}
+	}
+}
+
+func pass(ctx context.Context, conn net.Conn) {
+	// do nothing
+}
 
 func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, error) {
 	for {
