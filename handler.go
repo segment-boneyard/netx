@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"time"
 )
@@ -30,6 +31,25 @@ func (f HandlerFunc) ServeConn(ctx context.Context, conn net.Conn) {
 	f(ctx, conn)
 }
 
+// CloseHandler wraps handler to ensure that the connections it receives are
+// always closed after it returns.
+func CloseHandler(handler Handler) Handler {
+	return HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		defer conn.Close()
+		handler.ServeConn(ctx, conn)
+	})
+}
+
+// ErrorHandler wraps handler to catch panics and prints them with logger.
+//
+// If logger is nil the default logger is used instead.
+func ErrorHandler(logger *log.Logger, handler Handler) Handler {
+	return HandlerFunc(func(ctx context.Context, conn net.Conn) {
+		defer func() { Recover(recover(), conn, logger) }()
+		handler.ServeConn(ctx, conn)
+	})
+}
+
 var (
 	// Echo is the implementation of a connection handler that simply sends what
 	// it receives back to the client.
@@ -50,7 +70,13 @@ var (
 )
 
 func echo(ctx context.Context, conn net.Conn) {
-	go Copy(conn, conn)
+	ctx, cancel := context.WithCancel(ctx)
+
+	go func() {
+		defer cancel()
+		Copy(conn, conn)
+	}()
+
 	<-ctx.Done()
 	conn.Close()
 }
@@ -104,11 +130,11 @@ func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, erro
 
 		switch {
 		case prefix:
-			line, err = nil, errors.New("the line is too long")
+			line, err = nil, ErrLineTooLong
 		case err != nil:
 			line = nil
 		case r.Buffered() != 0:
-			line, err = nil, errors.New("pipelining is not supported")
+			line, err = nil, ErrNoPipeline
 		default:
 			if line = line[:len(line)+1]; line[len(line)-1] == '\r' {
 				line = line[:len(line)+1]
@@ -118,3 +144,13 @@ func readLine(ctx context.Context, conn net.Conn, r *bufio.Reader) ([]byte, erro
 		return line, err
 	}
 }
+
+var (
+	// ErrLineTooLong should be used by line-based protocol readers that detect
+	// a line longer than they were configured to handle.
+	ErrLineTooLong = errors.New("the line is too long")
+
+	// ErrNoPipeline should be used by handlers that detect an attempt to use
+	// pipelining when they don't support it.
+	ErrNoPipeline = errors.New("pipelining is not supported")
+)
