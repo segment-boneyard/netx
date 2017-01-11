@@ -72,11 +72,13 @@ func (s *Server) ListenAndServe() (err error) {
 // Serve accepts incoming connections on the Listener lstn, creating a new
 // service goroutine for each. The service goroutines simply invoke the
 // handler's ServeConn method.
-func (s *Server) Serve(lstn net.Listener) (err error) {
-	defer lstn.Close()
-
+//
+// The server becomes the owner of the listener which will be closed by the time
+// the Serve method returns.
+func (s *Server) Serve(lstn net.Listener) error {
 	join := &sync.WaitGroup{}
 	defer join.Wait()
+	defer lstn.Close()
 
 	ctx := s.Context
 	if ctx == nil {
@@ -86,14 +88,48 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go func(ctx context.Context) {
-		<-ctx.Done()
-		closeRead(lstn)
-	}(ctx)
+	done := ctx.Done()
+	errs := make(chan error)
+	conns := make(chan net.Conn)
+
+	join.Add(1)
+	go s.accept(ctx, lstn, conns, errs, join)
+
+	for conns != nil || errs != nil {
+		select {
+		case <-done:
+			lstn.Close()
+			done = nil
+
+		case err, ok := <-errs:
+			if !ok {
+				errs = nil
+				continue
+			}
+			return err
+
+		case conn, ok := <-conns:
+			if !ok {
+				conns = nil
+				continue
+			}
+			join.Add(1)
+			go s.serve(ctx, conn, join)
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) accept(ctx context.Context, lstn net.Listener, conns chan<- net.Conn, errs chan<- error, join *sync.WaitGroup) {
+	defer join.Done()
+	defer close(errs)
+	defer close(conns)
 
 	const maxBackoff = 1 * time.Second
 	for {
 		var conn net.Conn
+		var err error
 
 		for attempt := 0; true; attempt++ {
 			if conn, err = lstn.Accept(); err == nil {
@@ -120,17 +156,16 @@ func (s *Server) Serve(lstn net.Listener) (err error) {
 
 		if err != nil {
 			select {
-			default:
 			case <-ctx.Done():
 				// Don't report errors when the server stopped because its
 				// context was canceled.
-				err = nil
+			default:
+				errs <- err
 			}
 			return
 		}
 
-		join.Add(1)
-		go s.serve(ctx, conn, join)
+		conns <- conn
 	}
 }
 
