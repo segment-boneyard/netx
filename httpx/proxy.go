@@ -232,7 +232,7 @@ func guessScheme(localAddr string, remoteAddr string) string {
 	case "443":
 		return "https"
 	}
-	if scheme, _ := splitProtoAddr(localAddr); scheme == "tls" {
+	if scheme, _ := netx.SplitNetAddr(localAddr); scheme == "tls" {
 		return "https"
 	}
 	return "http"

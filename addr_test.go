@@ -31,3 +31,46 @@ func TestMultiAddr(t *testing.T) {
 		t.Error("bad address:", s)
 	}
 }
+
+func TestSplitNetAddr(t *testing.T) {
+	tests := []struct {
+		s string
+		n string
+		a string
+	}{
+		{
+			s: "",
+			n: "",
+			a: "",
+		},
+		{
+			s: "tcp://",
+			n: "tcp",
+			a: "",
+		},
+		{
+			s: "127.0.0.1:4242",
+			n: "",
+			a: "127.0.0.1:4242",
+		},
+		{
+			s: "tcp://127.0.0.1:4242",
+			n: "tcp",
+			a: "127.0.0.1:4242",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.s, func(t *testing.T) {
+			n, a := SplitNetAddr(test.s)
+
+			if n != test.n {
+				t.Error("bad network:", n)
+			}
+
+			if a != test.a {
+				t.Error("bad address:", a)
+			}
+		})
+	}
+}

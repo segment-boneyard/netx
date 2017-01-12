@@ -24,17 +24,6 @@ func protoVersion(req *http.Request) string {
 	return proto
 }
 
-// splitProtoAddr splits uri into the leading protocol scheme and trailing
-// address.
-func splitProtoAddr(uri string) (proto string, addr string) {
-	if off := strings.Index(uri, "://"); off >= 0 {
-		proto, addr = uri[:off], uri[off+3:]
-	} else {
-		addr = uri
-	}
-	return
-}
-
 // copyHeader copies the HTTP header src into dst.
 func copyHeader(dst http.Header, src http.Header) {
 	for name, values := range src {

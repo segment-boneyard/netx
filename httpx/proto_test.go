@@ -87,31 +87,6 @@ func TestProtoVersion(t *testing.T) {
 	}
 }
 
-func TestSplitProtoAddr(t *testing.T) {
-	tests := []struct {
-		uri   string
-		proto string
-		addr  string
-	}{
-		{"localhost:80", "", "localhost:80"},
-		{"http://localhost:80", "http", "localhost:80"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.uri, func(t *testing.T) {
-			proto, addr := splitProtoAddr(test.uri)
-
-			if proto != test.proto {
-				t.Error("bad protocol:", proto)
-			}
-
-			if addr != test.addr {
-				t.Error("bad address:", addr)
-			}
-		})
-	}
-}
-
 func TestCopyHeader(t *testing.T) {
 	h1 := http.Header{"Content-Type": {"text/html"}}
 	h2 := http.Header{"Content-Type": {"text/html"}, "Content-Length": {"42"}}

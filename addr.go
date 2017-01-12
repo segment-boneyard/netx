@@ -38,3 +38,13 @@ func (addr MultiAddr) String() string {
 	}
 	return strings.Join(s, ",")
 }
+
+// SplitNetAddr splits the network scheme and the address in s.
+func SplitNetAddr(s string) (net string, addr string) {
+	if i := strings.Index(s, "://"); i >= 0 {
+		net, addr = s[:i], s[i+3:]
+	} else {
+		addr = s
+	}
+	return
+}
