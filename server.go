@@ -2,6 +2,7 @@ package netx
 
 import (
 	"context"
+	"io"
 	"log"
 	"net"
 	"runtime"
@@ -55,9 +56,10 @@ func (s *Server) ListenAndServe() (err error) {
 // The server becomes the owner of the listener which will be closed by the time
 // the Serve method returns.
 func (s *Server) Serve(lstn net.Listener) error {
+	defer lstn.Close()
+
 	join := &sync.WaitGroup{}
 	defer join.Wait()
-	defer lstn.Close()
 
 	ctx := s.Context
 	if ctx == nil {
@@ -134,12 +136,21 @@ func (s *Server) accept(ctx context.Context, lstn net.Listener, conns chan<- net
 		}
 
 		if err != nil {
-			select {
-			case <-ctx.Done():
-				// Don't report errors when the server stopped because its
-				// context was canceled.
-			default:
-				errs <- err
+			switch e := err.(type) {
+			case *net.OpError:
+				// Don't report EOF, this is a normal termination of the listener.
+				if e.Err == io.EOF {
+					err = nil
+				}
+			}
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					// Don't report errors when the server stopped because its
+					// context was canceled.
+				default:
+					errs <- err
+				}
 			}
 			return
 		}

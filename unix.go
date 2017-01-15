@@ -208,3 +208,17 @@ func (c *sendUnixConn) Close() (err error) {
 	atomic.StoreUint32(&c.closed, 1)
 	return c.Conn.Close()
 }
+
+func (c *sendUnixConn) Read(b []byte) (n int, err error) {
+	if n, err = c.Conn.Read(b); err != nil && !IsTemporary(err) {
+		atomic.StoreUint32(&c.closed, 1)
+	}
+	return
+}
+
+func (c *sendUnixConn) Write(b []byte) (n int, err error) {
+	if n, err = c.Conn.Write(b); err != nil && !IsTemporary(err) {
+		atomic.StoreUint32(&c.closed, 1)
+	}
+	return
+}
