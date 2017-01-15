@@ -2,6 +2,7 @@ package netx
 
 import (
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -46,5 +47,27 @@ func SplitNetAddr(s string) (net string, addr string) {
 	} else {
 		addr = s
 	}
+	return
+}
+
+// SplitAddrPort splits the address and port from s.
+//
+// The function is a wrapper around the standard net.SplitHostPort which
+// expects the port part to be a number, setting the port value to -1 if it
+// could not parse it.
+func SplitAddrPort(s string) (addr string, port int) {
+	h, p, err := net.SplitHostPort(s)
+
+	if err != nil {
+		addr = s
+		port = -1
+		return
+	}
+
+	if port, err = strconv.Atoi(p); err != nil {
+		port = -1
+	}
+
+	addr = h
 	return
 }

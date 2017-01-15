@@ -74,3 +74,56 @@ func TestSplitNetAddr(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitAddrPort(t *testing.T) {
+	tests := []struct {
+		s string
+		a string
+		p int
+	}{
+		{
+			s: "",
+			a: "",
+			p: -1,
+		},
+		{
+			s: "127.0.0.1",
+			a: "127.0.0.1",
+			p: -1,
+		},
+		{
+			s: "127.0.0.1:4242",
+			a: "127.0.0.1",
+			p: 4242,
+		},
+		{
+			s: "[::1]:4242",
+			a: "::1",
+			p: 4242,
+		},
+		{
+			s: ":1234",
+			a: "",
+			p: 1234,
+		},
+		{
+			s: "127.0.0.1:http",
+			a: "127.0.0.1",
+			p: -1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.s, func(t *testing.T) {
+			a, p := SplitAddrPort(test.s)
+
+			if a != test.a {
+				t.Error("bad address:", a)
+			}
+
+			if p != test.p {
+				t.Error("bad port:", p)
+			}
+		})
+	}
+}
