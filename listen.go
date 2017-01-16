@@ -120,7 +120,7 @@ func ListenPacket(address string) (conn net.PacketConn, err error) {
 		if c, err = net.FileConn(f); err != nil {
 			return
 		}
-		conn = c.(*net.UnixConn)
+		conn = c.(net.PacketConn)
 		return
 	}
 
