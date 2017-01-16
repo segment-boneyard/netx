@@ -120,9 +120,8 @@ func ListenPacket(address string) (conn net.PacketConn, err error) {
 		if c, err = net.FileConn(f); err != nil {
 			return
 		}
-		u := c.(*net.UnixConn)
-		defer u.Close()
-		return RecvUnixPacketConn(u)
+		conn = c.(*net.UnixConn)
+		return
 	}
 
 	// TODO: listen on all addresses?
