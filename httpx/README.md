@@ -1,4 +1,4 @@
-netx [![GoDoc](https://godoc.org/github.com/segmentio/netx/httpx?status.svg)](https://godoc.org/github.com/segmentio/netx/httpx)
+httpx [![GoDoc](https://godoc.org/github.com/segmentio/netx/httpx?status.svg)](https://godoc.org/github.com/segmentio/netx/httpx)
 ====
 
 Go package augmenting the standard net/http package with more basic building
