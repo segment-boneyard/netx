@@ -8,6 +8,36 @@ import (
 	"strings"
 )
 
+// Negotiate performs an Accept header negotiation where the server can expose
+// the content in the given list of types.
+//
+// If none types match the method returns the first element in the list of
+// types.
+//
+// Here's an example of a typical use of this function:
+//
+//	accept := Negotiate(req.Header.Get("Accept"), "image/png", "image/jpg")
+//
+func Negotiate(accept string, types ...string) string {
+	a, _ := parseAccept(accept)
+	return a.Negotiate(types...)
+}
+
+// Negotiate performs an Accept-Encoding header negotiation where the server can
+// expose the content in the given list of codings.
+//
+// If none types match the method returns an empty string to indicate that the
+// server should not apply any encoding to its response.
+//
+// Here's an exmaple of a typical use of this function:
+//
+//	encoding := NegotiateEncoding(req.Get("Accept-Encoding"), "gzip", "deflate")
+//
+func NegotiateEncoding(accept string, codings ...string) string {
+	a, _ := parseAcceptEncoding(accept)
+	return a.Negotiate(codings...)
+}
+
 // acceptItem is the representation of an item in an Accept header.
 type acceptItem struct {
 	typ    string
@@ -228,6 +258,22 @@ func (accept acceptEncoding) Format(w fmt.State, r rune) {
 		}
 		item.Format(w, r)
 	}
+}
+
+// Negotiate performs an Accept-Encoding header negotiation where the server can
+// expose the content in the given list of codings.
+//
+// If none types match the method returns an empty string to indicate that the
+// server should not apply any encoding to its response.
+func (accept acceptEncoding) Negotiate(codings ...string) string {
+	for _, acc := range accept {
+		for _, coding := range codings {
+			if coding == acc.coding {
+				return coding
+			}
+		}
+	}
+	return ""
 }
 
 // Less satisfies sort.Interface.

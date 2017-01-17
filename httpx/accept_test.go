@@ -2,6 +2,7 @@ package httpx
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -189,22 +190,41 @@ func TestAcceptNegotiate(t *testing.T) {
 		},
 	}
 
-	a := accept{
+	for _, test := range tests {
+		t.Run(test.s, func(t *testing.T) {
+			if s := Negotiate("application/msgpack;q=1.0, application/json;q=0.5", test.t...); s != test.s {
+				t.Error(s)
+			}
+		})
+	}
+}
+
+func TestAcceptNegotiateEncoding(t *testing.T) {
+	tests := []struct {
+		c []string
+		s string
+	}{
 		{
-			typ: "application",
-			sub: "msgpack",
-			q:   1.0,
+			c: nil,
+			s: "",
 		},
 		{
-			typ: "application",
-			sub: "json",
-			q:   0.5,
+			c: []string{"gzip"},
+			s: "gzip",
+		},
+		{
+			c: []string{"deflate"},
+			s: "deflate",
+		},
+		{
+			c: []string{"deflate", "gzip"},
+			s: "gzip",
 		},
 	}
 
 	for _, test := range tests {
-		t.Run(test.s, func(t *testing.T) {
-			if s := a.Negotiate(test.t...); s != test.s {
+		t.Run(strings.Join(test.c, ","), func(t *testing.T) {
+			if s := NegotiateEncoding("gzip;q=1.0, deflate;q=0.5", test.c...); s != test.s {
 				t.Error(s)
 			}
 		})
