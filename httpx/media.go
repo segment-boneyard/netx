@@ -6,17 +6,17 @@ import (
 	"strings"
 )
 
-// mediaRange is a representation of a HTTP media range as described in
+// MediaRange is a representation of a HTTP media range as described in
 // https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
-type mediaRange struct {
+type MediaRange struct {
 	typ    string
 	sub    string
-	params []mediaParam
+	params []MediaParam
 }
 
 // Param return the value of the parameter with name, which will be an empty
 // string if none was found.
-func (r mediaRange) Param(name string) string {
+func (r MediaRange) Param(name string) string {
 	for _, p := range r.params {
 		if tokenEqual(p.name, name) {
 			return p.value
@@ -26,12 +26,12 @@ func (r mediaRange) Param(name string) string {
 }
 
 // String satisfies the fmt.Stringer interface.
-func (r mediaRange) String() string {
+func (r MediaRange) String() string {
 	return fmt.Sprint(r)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (r mediaRange) Format(w fmt.State, _ rune) {
+func (r MediaRange) Format(w fmt.State, _ rune) {
 	fmt.Fprintf(w, "%s/%s", r.typ, r.sub)
 
 	for _, p := range r.params {
@@ -39,14 +39,14 @@ func (r mediaRange) Format(w fmt.State, _ rune) {
 	}
 }
 
-// parseMediaRange parses a string representation of a HTTP media range from s.
-func parseMediaRange(s string) (r mediaRange, err error) {
+// ParseMediaRange parses a string representation of a HTTP media range from s.
+func ParseMediaRange(s string) (r MediaRange, err error) {
 	var s1 string
 	var s2 string
 	var s3 string
 	var i int
 	var j int
-	var mp []mediaParam
+	var mp []MediaParam
 
 	if i = strings.IndexByte(s, '/'); i < 0 {
 		goto error
@@ -69,13 +69,13 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 	}
 
 	for len(s3) != 0 {
-		var p mediaParam
+		var p MediaParam
 
 		if i = strings.IndexByte(s3, ';'); i < 0 {
 			i = len(s3)
 		}
 
-		if p, err = parseMediaParam(trimOWS(s3[:i])); err != nil {
+		if p, err = ParseMediaParam(trimOWS(s3[:i])); err != nil {
 			goto error
 		}
 
@@ -87,7 +87,7 @@ func parseMediaRange(s string) (r mediaRange, err error) {
 		}
 	}
 
-	r = mediaRange{
+	r = MediaRange{
 		typ:    s1,
 		sub:    s2,
 		params: mp,
@@ -102,26 +102,26 @@ func errorInvalidMediaRange(s string) error {
 	return errors.New("invalid media range: " + s)
 }
 
-// mediaParam is a representation of a HTTP media parameter as described in
+// MediaParam is a representation of a HTTP media parameter as described in
 // https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
-type mediaParam struct {
+type MediaParam struct {
 	name  string
 	value string
 }
 
 // String satisfies the fmt.Stringer interface.
-func (p mediaParam) String() string {
+func (p MediaParam) String() string {
 	return fmt.Sprint(p)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (p mediaParam) Format(w fmt.State, _ rune) {
+func (p MediaParam) Format(w fmt.State, _ rune) {
 	fmt.Fprintf(w, "%v=%v", p.name, quoted(p.value))
 }
 
-// parseMediaParam parses a string representation of a HTTP media parameter
+// ParseMediaParam parses a string representation of a HTTP media parameter
 // from s.
-func parseMediaParam(s string) (p mediaParam, err error) {
+func ParseMediaParam(s string) (p MediaParam, err error) {
 	var s1 string
 	var s2 string
 	var q quoted
@@ -141,7 +141,7 @@ func parseMediaParam(s string) (p mediaParam, err error) {
 		goto error
 	}
 
-	p = mediaParam{
+	p = MediaParam{
 		name:  s1,
 		value: string(q),
 	}
@@ -151,31 +151,31 @@ error:
 	return
 }
 
-// mediaType is a representation of a HTTP media type which is usually expressed
+// MediaType is a representation of a HTTP media type which is usually expressed
 // in the form of a main and sub type as in "main/sub", where both may be the
 // special wildcard token "*".
-type mediaType struct {
+type MediaType struct {
 	typ string
 	sub string
 }
 
 // Contains returns true if t is a superset or is equal to t2.
-func (t mediaType) Contains(t2 mediaType) bool {
+func (t MediaType) Contains(t2 MediaType) bool {
 	return t.typ == "*" || (t.typ == t2.typ && (t.sub == "*" || t.sub == t2.sub))
 }
 
 // String satisfies the fmt.Stringer interface.
-func (t mediaType) String() string {
+func (t MediaType) String() string {
 	return fmt.Sprint(t)
 }
 
 // Format satisfies the fmt.Formatter interface.
-func (t mediaType) Format(w fmt.State, _ rune) {
+func (t MediaType) Format(w fmt.State, _ rune) {
 	fmt.Fprintf(w, "%s/%s", t.typ, t.sub)
 }
 
-// parseMediaType parses the media type in s.
-func parseMediaType(s string) (t mediaType, err error) {
+// ParseMediaType parses the media type in s.
+func ParseMediaType(s string) (t MediaType, err error) {
 	var s1 string
 	var s2 string
 	var i = strings.IndexByte(s, '/')
@@ -191,7 +191,7 @@ func parseMediaType(s string) (t mediaType, err error) {
 		goto error
 	}
 
-	t = mediaType{
+	t = MediaType{
 		typ: s1,
 		sub: s2,
 	}

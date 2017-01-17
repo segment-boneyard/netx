@@ -8,25 +8,25 @@ import (
 func TestParseMediaTypeSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		m mediaType
+		m MediaType
 	}{
 		{
 			s: `*/*`,
-			m: mediaType{typ: "*", sub: "*"},
+			m: MediaType{typ: "*", sub: "*"},
 		},
 		{
 			s: `text/*`,
-			m: mediaType{typ: "text", sub: "*"},
+			m: MediaType{typ: "text", sub: "*"},
 		},
 		{
 			s: `text/plain`,
-			m: mediaType{typ: "text", sub: "plain"},
+			m: MediaType{typ: "text", sub: "plain"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.m.String(), func(t *testing.T) {
-			m, err := parseMediaType(test.s)
+			m, err := ParseMediaType(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -52,7 +52,7 @@ func TestParseMediaTypeFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if m, err := parseMediaType(test.s); err == nil {
+			if m, err := ParseMediaType(test.s); err == nil {
 				t.Error(m)
 			}
 		})
@@ -61,20 +61,20 @@ func TestParseMediaTypeFailure(t *testing.T) {
 
 func TestMediaTypeContainsTrue(t *testing.T) {
 	tests := []struct {
-		t1 mediaType
-		t2 mediaType
+		t1 MediaType
+		t2 MediaType
 	}{
 		{
-			t1: mediaType{typ: "*", sub: "*"},
-			t2: mediaType{typ: "text", sub: "plain"},
+			t1: MediaType{typ: "*", sub: "*"},
+			t2: MediaType{typ: "text", sub: "plain"},
 		},
 		{
-			t1: mediaType{typ: "text", sub: "*"},
-			t2: mediaType{typ: "text", sub: "plain"},
+			t1: MediaType{typ: "text", sub: "*"},
+			t2: MediaType{typ: "text", sub: "plain"},
 		},
 		{
-			t1: mediaType{typ: "text", sub: "plain"},
-			t2: mediaType{typ: "text", sub: "plain"},
+			t1: MediaType{typ: "text", sub: "plain"},
+			t2: MediaType{typ: "text", sub: "plain"},
 		},
 	}
 
@@ -89,16 +89,16 @@ func TestMediaTypeContainsTrue(t *testing.T) {
 
 func TestMediaTypeContainsFalse(t *testing.T) {
 	tests := []struct {
-		t1 mediaType
-		t2 mediaType
+		t1 MediaType
+		t2 MediaType
 	}{
 		{
-			t1: mediaType{typ: "text", sub: "*"},
-			t2: mediaType{typ: "image", sub: "png"},
+			t1: MediaType{typ: "text", sub: "*"},
+			t2: MediaType{typ: "image", sub: "png"},
 		},
 		{
-			t1: mediaType{typ: "text", sub: "plain"},
-			t2: mediaType{typ: "text", sub: "html"},
+			t1: MediaType{typ: "text", sub: "plain"},
+			t2: MediaType{typ: "text", sub: "html"},
 		},
 	}
 
@@ -114,21 +114,21 @@ func TestMediaTypeContainsFalse(t *testing.T) {
 func TestParseMediaParamSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		p mediaParam
+		p MediaParam
 	}{
 		{
 			s: `key=value`,
-			p: mediaParam{name: "key", value: "value"},
+			p: MediaParam{name: "key", value: "value"},
 		},
 		{
 			s: `key="你好"`,
-			p: mediaParam{name: "key", value: "你好"},
+			p: MediaParam{name: "key", value: "你好"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.p.String(), func(t *testing.T) {
-			p, err := parseMediaParam(test.s)
+			p, err := ParseMediaParam(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -155,7 +155,7 @@ func TestParseMediaParamFailure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if p, err := parseMediaParam(test.s); err == nil {
+			if p, err := ParseMediaParam(test.s); err == nil {
 				t.Error(p)
 			}
 		})
@@ -165,35 +165,35 @@ func TestParseMediaParamFailure(t *testing.T) {
 func TestParseMediaRangeSuccess(t *testing.T) {
 	tests := []struct {
 		s string
-		r mediaRange
+		r MediaRange
 	}{
 		{
 			s: `image/*`,
-			r: mediaRange{
+			r: MediaRange{
 				typ: "image",
 				sub: "*",
 			},
 		},
 		{
 			s: `image/*;`, // trailing ';'
-			r: mediaRange{
+			r: MediaRange{
 				typ: "image",
 				sub: "*",
 			},
 		},
 		{
 			s: `text/html;key1=hello;key2="你好"`,
-			r: mediaRange{
+			r: MediaRange{
 				typ:    "text",
 				sub:    "html",
-				params: []mediaParam{{"key1", "hello"}, {"key2", "你好"}},
+				params: []MediaParam{{"key1", "hello"}, {"key2", "你好"}},
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.r.String(), func(t *testing.T) {
-			r, err := parseMediaRange(test.s)
+			r, err := ParseMediaRange(test.s)
 
 			if err != nil {
 				t.Error(err)
@@ -211,15 +211,15 @@ func TestParseMediaRangeFailure(t *testing.T) {
 		s string
 	}{
 		{``},            // empty string
-		{`image`},       // no media type
-		{`/`},           // bad media type
+		{`image`},       // no Media type
+		{`/`},           // bad Media type
 		{`image/,`},     // bad sub-type
 		{`image/*;bad`}, // bad parameters
 	}
 
 	for _, test := range tests {
 		t.Run(test.s, func(t *testing.T) {
-			if m, err := parseMediaRange(test.s); err == nil {
+			if m, err := ParseMediaRange(test.s); err == nil {
 				t.Error(m)
 			}
 		})
@@ -227,21 +227,21 @@ func TestParseMediaRangeFailure(t *testing.T) {
 }
 
 func TestMediaRangeParam(t *testing.T) {
-	r := mediaRange{
+	r := MediaRange{
 		typ:    "image",
 		sub:    "*",
-		params: []mediaParam{{"answer", "42"}},
+		params: []MediaParam{{"answer", "42"}},
 	}
 
 	p1 := r.Param("answer")
 	p2 := r.Param("other")
 
 	if p1 != "42" {
-		t.Error("found bad media parameter:", p1)
+		t.Error("found bad Media parameter:", p1)
 	}
 
 	if p2 != "" {
-		t.Error("found non-existing media parameter:", p2)
+		t.Error("found non-existing Media parameter:", p2)
 	}
 }
 
