@@ -20,7 +20,7 @@ func BaseConn(conn net.Conn) net.Conn {
 	return conn
 }
 
-// BaseConn returns the base connection object of conn.
+// BasePacketConn returns the base connection object of conn.
 //
 // The function works by dynamically checking whether conn implements the
 // `BasePacketConn() net.PacketConn` method, recursing dynamically to find the root connection

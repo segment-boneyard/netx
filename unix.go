@@ -191,8 +191,8 @@ func (h *SendUnixHandler) ServeConn(ctx context.Context, conn net.Conn) {
 }
 
 // UnixConn returns a pointer to the underlying unix domain socket.
-func (c *SendUnixHandler) UnixConn() *net.UnixConn {
-	return &c.socket
+func (h *SendUnixHandler) UnixConn() *net.UnixConn {
+	return &h.socket
 }
 
 type sendUnixConn struct {
