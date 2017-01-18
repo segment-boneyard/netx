@@ -3,7 +3,36 @@ package netx
 import (
 	"net"
 	"os"
+	"syscall"
 )
+
+// DupUnix makes a duplicate of the given unix connection.
+func DupUnix(conn *net.UnixConn) (*net.UnixConn, error) {
+	c, err := dup(conn)
+	if err != nil {
+		return nil, err
+	}
+	return c.(*net.UnixConn), err
+}
+
+// DupTCP makes a duplicate of the given TCP connection.
+func DupTCP(conn *net.TCPConn) (*net.TCPConn, error) {
+	c, err := dup(conn)
+	if err != nil {
+		return nil, err
+	}
+	return c.(*net.TCPConn), err
+}
+
+func dup(conn fileConn) (net.Conn, error) {
+	var f *os.File
+	if f, err = conn.Fil(); err != nil {
+		return
+	}
+	syscall.SetNonblock(int(f.Fd()), true)
+	defer f.Close()
+	return net.FileConn(f)
+}
 
 // BaseConn returns the base connection object of conn.
 //
