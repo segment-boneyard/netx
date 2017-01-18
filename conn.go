@@ -12,7 +12,7 @@ func DupUnix(conn *net.UnixConn) (*net.UnixConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.(*net.UnixConn), err
+	return c.(*net.UnixConn), nil
 }
 
 // DupTCP makes a duplicate of the given TCP connection.
@@ -21,13 +21,13 @@ func DupTCP(conn *net.TCPConn) (*net.TCPConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.(*net.TCPConn), err
+	return c.(*net.TCPConn), nil
 }
 
 func dup(conn fileConn) (net.Conn, error) {
-	var f *os.File
-	if f, err = conn.Fil(); err != nil {
-		return
+	f, err := conn.File()
+	if err != nil {
+		return nil, err
 	}
 	syscall.SetNonblock(int(f.Fd()), true)
 	defer f.Close()
