@@ -9,10 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	httpxflate "github.com/segmentio/netx/httpx/flate"
-	httpxgzip "github.com/segmentio/netx/httpx/gzip"
-	httpxzlib "github.com/segmentio/netx/httpx/zlib"
 )
 
 func TestEncodingHandler(t *testing.T) {
@@ -43,9 +39,9 @@ func TestEncodingHandler(t *testing.T) {
 	h := NewEncodingHandler(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte("Hello World!"))
 	}),
-		httpxflate.NewContentEncoder(),
-		httpxgzip.NewContentEncoder(),
-		httpxzlib.NewContentEncoder(),
+		NewDeflateEncoder(),
+		NewGzipEncoder(),
+		NewZlibEncoder(),
 	)
 
 	for _, test := range tests {
