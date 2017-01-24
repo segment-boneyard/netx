@@ -204,7 +204,7 @@ func readHeaderValue(s string) (value string, tail string) {
 // isIdempotent returns true if method is idempotent.
 func isIdempotent(method string) bool {
 	switch method {
-	case "HEAD", "GET", "PUT", "DELETE", "OPTIONS":
+	case http.MethodHead, http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodOptions:
 		return true
 	}
 	return false

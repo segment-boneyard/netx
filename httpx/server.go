@@ -135,7 +135,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) {
 // wasn't aware that it was being proxied.
 func (s *Server) ServeProxy(ctx context.Context, conn net.Conn, target net.Addr) {
 	handler := http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
-		scheme, _ := netx.SplitNetAddr(req.Host)
+		scheme := req.URL.Scheme
+		if len(scheme) == 0 {
+			scheme, _ = netx.SplitNetAddr(req.Host)
+		}
 
 		// If the Host had no scheme we're propbably in a transparent proxy and
 		// the client didn't know it had to place the full URL in the header.

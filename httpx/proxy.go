@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -38,6 +39,14 @@ type ReverseProxy struct {
 	// Transport is used to forward HTTP requests to backend servers. If nil,
 	// http.DefaultTransport is used instead.
 	Transport http.RoundTripper
+
+	// DialContext is used for dialing new TCP connections on HTTP upgrades.
+	DialContext func(context.Context, string, string) (net.Conn, error)
+
+	// TLSClientConfig specifies the TLS configuration to use for HTTP upgrades
+	// that happen over a secured link.
+	// If nil, the default configuration is used.
+	TLSClientConfig *tls.Config
 }
 
 // ServeHTTP satisfies the http.Handler interface.
@@ -57,20 +66,19 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	outreq.Close = false
 
 	// No target host was set on the request URL, assuming the client intended
-	// to read req.Host then.
+	// to reach req.Host then.
 	if len(outreq.URL.Host) == 0 {
 		outreq.URL.Host = req.Host
 	}
 
 	// No target protocol was set, attempting to guess it from the port that the
 	// client is trying to connect to (fail later otherwise).
-	scheme := outreq.URL.Scheme
-	if len(scheme) == 0 {
+	if len(outreq.URL.Scheme) == 0 {
 		outreq.URL.Scheme = guessScheme(localAddr, req.URL.Host)
 	}
 
-	// Remove hop-by-hop headers from the request so they aren't forwarded, save
-	// a potential upgrade header because we'd need to put it back later.
+	// Remove hop-by-hop headers from the request so they aren't forwarded to
+	// the backend servers.
 	copyHeader(outreq.Header, req.Header)
 	deleteHopFields(outreq.Header)
 
@@ -78,7 +86,7 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if _, hasFwd := outreq.Header["Forwarded"]; !hasFwd {
 		translateXForwarded(outreq.Header)
 	}
-	addForwarded(outreq.Header, scheme, remoteAddr, localAddr)
+	addForwarded(outreq.Header, outreq.URL.Scheme, remoteAddr, localAddr)
 	addVia(outreq.Header, protoVersion(req), localAddr)
 
 	// Decrement the Max-Forward header for TRACE and OPTIONS requests.
@@ -115,6 +123,7 @@ func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 
 	res, err := transport.RoundTrip(req)
 	if err != nil {
+		fmt.Println("bad gateway:", err)
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
@@ -145,12 +154,20 @@ func (p *ReverseProxy) serveTRACE(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *ReverseProxy) serveUpgrade(w http.ResponseWriter, req *http.Request) {
+	dial := p.DialContext
+	if dial == nil {
+		dial = (&net.Dialer{Timeout: 10 * time.Second}).DialContext
+	}
+
 	ctx := req.Context()
 
-	backend, err := p.dial(ctx, "tcp", req.URL.Host)
+	backend, err := dial(ctx, "tcp", req.URL.Host)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
+	}
+	if req.URL.Scheme == "https" {
+		backend = tls.Client(backend, p.TLSClientConfig)
 	}
 	defer backend.Close()
 
@@ -212,27 +229,16 @@ func (p *ReverseProxy) serveUpgrade(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (p *ReverseProxy) dial(ctx context.Context, network string, address string) (conn net.Conn, err error) {
-	if conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", address); err != nil {
-		return
-	}
-	switch network {
-	case "https", "wss", "tls":
-		conn = tls.Client(conn, &tls.Config{})
-	}
-	return
-}
-
 // guessScheme attempts to guess the protocol that should be used for a proxied
 // request (either http or https).
 func guessScheme(localAddr string, remoteAddr string) string {
+	if scheme, _ := netx.SplitNetAddr(localAddr); scheme == "tls" {
+		return "https"
+	}
 	switch _, port, _ := net.SplitHostPort(remoteAddr); port {
 	case "", "80":
 		return "http"
 	case "443":
-		return "https"
-	}
-	if scheme, _ := netx.SplitNetAddr(localAddr); scheme == "tls" {
 		return "https"
 	}
 	return "http"
