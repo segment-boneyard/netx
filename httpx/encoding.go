@@ -6,29 +6,114 @@ import (
 	"compress/zlib"
 	"io"
 	"net/http"
+	"strings"
 )
 
-// ContentEncoder is an interfae implemented by types that provide the
+// ContentEncoding is an interfae implemented by types that provide the
 // implementation of a content encoding for HTTP responses.
-type ContentEncoder interface {
-	// Coding returns the format in which the content encoder's writers
+type ContentEncoding interface {
+	// Coding returns the format in which the content encoding's writers
 	// can encode HTTP responses.
 	Coding() string
 
-	// NewWriter wraps w in a writer that applies an the content encoder's
-	// format to all bytes it receives.
-	NewWriter(w io.Writer) io.WriteCloser
+	// NewReader wraps r in a reader that supports the content encoding's
+	// format.
+	NewReader(r io.Reader) (io.ReadCloser, error)
+
+	// NewWriter wraps w in a writer that applies the content encoding's
+	// format.
+	NewWriter(w io.Writer) (io.WriteCloser, error)
+}
+
+// DefaultEncodings is the list of encodings supported by the encoding handler
+// and transports by default.
+var DefaultEncodings = []ContentEncoding{
+	NewGzipEncoding(),
+	NewZlibEncoding(),
+	NewDeflateEncoding(),
+}
+
+// NewEncodingTransport wraps transport to support decoding the responses with
+// specified content encodings.
+//
+// If contentEncodings is nil (no arguments were passed) the returned transport
+// uses DefaultEncodings.
+func NewEncodingTransport(transport http.RoundTripper, contentEncodings ...ContentEncoding) http.RoundTripper {
+	if contentEncodings == nil {
+		contentEncodings = DefaultEncodings
+	}
+
+	encodings := make(map[string]ContentEncoding, len(contentEncodings))
+	codings := make([]string, 0, len(contentEncodings))
+
+	for _, encoding := range contentEncodings {
+		coding := encoding.Coding()
+		codings = append(codings, coding)
+		encodings[coding] = encoding
+	}
+
+	acceptEncoding := strings.Join(codings, ", ")
+
+	return RoundTripperFunc(func(req *http.Request) (res *http.Response, err error) {
+		req.Header["Accept-Encoding"] = []string{acceptEncoding}
+
+		if res, err = transport.RoundTrip(req); err != nil {
+			return
+		}
+
+		if coding := res.Header.Get("Content-Encoding"); len(coding) != 0 {
+			if encoding := encodings[coding]; encoding != nil {
+				var decoder io.ReadCloser
+
+				if decoder, err = encoding.NewReader(res.Body); err != nil {
+					res.Body.Close()
+					return
+				}
+
+				res.Body = &contentEncodingReader{
+					decoder: decoder,
+					body:    res.Body,
+				}
+
+				delete(res.Header, "Content-Encoding")
+			}
+		}
+
+		return
+	})
+}
+
+type contentEncodingReader struct {
+	decoder io.ReadCloser
+	body    io.ReadCloser
+}
+
+func (r *contentEncodingReader) Read(b []byte) (int, error) {
+	return r.decoder.Read(b)
+}
+
+func (r *contentEncodingReader) Close() error {
+	r.decoder.Close()
+	r.body.Close()
+	return nil
 }
 
 // NewEncodingHandler wraps handler to support encoding the responses by
-// negotiating the coding based on the given list of supported content encoders.
-func NewEncodingHandler(handler http.Handler, contentEncoders ...ContentEncoder) http.Handler {
-	encoders := make(map[string]ContentEncoder, len(contentEncoders))
-	codings := make([]string, 0, len(contentEncoders))
+// negotiating the coding based on the given list of supported content encodings.
+//
+// If contentEncodings is nil (no arguments were passed) the returned handler
+// uses DefaultEncodings.
+func NewEncodingHandler(handler http.Handler, contentEncodings ...ContentEncoding) http.Handler {
+	if contentEncodings == nil {
+		contentEncodings = DefaultEncodings
+	}
 
-	for _, encoder := range contentEncoders {
-		coding := encoder.Coding()
-		encoders[coding] = encoder
+	encodings := make(map[string]ContentEncoding, len(contentEncodings))
+	codings := make([]string, 0, len(contentEncodings))
+
+	for _, encoding := range contentEncodings {
+		coding := encoding.Coding()
+		encodings[coding] = encoding
 		codings = append(codings, coding)
 	}
 
@@ -36,126 +121,131 @@ func NewEncodingHandler(handler http.Handler, contentEncoders ...ContentEncoder)
 		coding := NegotiateEncoding(req.Header.Get("Accept-Encoding"), codings...)
 
 		if len(coding) != 0 {
-			w := encoders[coding].NewWriter(res)
-			defer w.Close()
+			if w, err := encodings[coding].NewWriter(res); err == nil {
+				defer w.Close()
 
-			h := res.Header()
-			h.Set("Content-Encoding", coding)
+				h := res.Header()
+				h.Set("Content-Encoding", coding)
 
-			res = contentEncoderWriter{res, w}
+				res = &contentEncodingWriter{res, w}
+				delete(req.Header, "Accept-Encoding")
+			}
 		}
 
 		handler.ServeHTTP(res, req)
 	})
 }
 
-type contentEncoderWriter struct {
+type contentEncodingWriter struct {
 	http.ResponseWriter
 	io.Writer
 }
 
-func (w contentEncoderWriter) Write(b []byte) (int, error) {
+func (w *contentEncodingWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// DeflateEncoder implements the ContentEncoder interface for the deflate
+// DeflateEncoding implements the ContentEncoding interface for the deflate
 // algorithm.
-type DeflateEncoder struct {
+type DeflateEncoding struct {
 	Level int
 }
 
-// NewDeflateEncoder creates a new content encoder with the default compression
+// NewDeflateEncoding creates a new content encoding with the default compression
 // level.
-func NewDeflateEncoder() *DeflateEncoder {
-	return NewDeflateEncoderLevel(flate.DefaultCompression)
+func NewDeflateEncoding() *DeflateEncoding {
+	return NewDeflateEncodingLevel(flate.DefaultCompression)
 }
 
-// NewDeflateEncoderLevel creates a new content encoder with the given
+// NewDeflateEncodingLevel creates a new content encoding with the given
 // compression level.
-func NewDeflateEncoderLevel(level int) *DeflateEncoder {
-	return &DeflateEncoder{
+func NewDeflateEncodingLevel(level int) *DeflateEncoding {
+	return &DeflateEncoding{
 		Level: level,
 	}
 }
 
-// Coding satsifies ContentEncoder.
-func (e *DeflateEncoder) Coding() string {
+// Coding satsifies the ContentEncoding interface.
+func (e *DeflateEncoding) Coding() string {
 	return "deflate"
 }
 
-// NewWriter satsifies ContentEncoder.
-func (e *DeflateEncoder) NewWriter(w io.Writer) io.WriteCloser {
-	z, err := flate.NewWriter(w, e.Level)
-	if err != nil {
-		panic(err)
-	}
-	return z
+// NewReader satisfies the ContentEncoding interface.
+func (e *DeflateEncoding) NewReader(r io.Reader) (io.ReadCloser, error) {
+	return flate.NewReader(r), nil
 }
 
-// GzipEncoder implements the ContentEncoder interface for the gzip
+// NewWriter satsifies the ContentEncoding interface.
+func (e *DeflateEncoding) NewWriter(w io.Writer) (io.WriteCloser, error) {
+	return flate.NewWriter(w, e.Level)
+}
+
+// GzipEncoding implements the ContentEncoding interface for the gzip
 // algorithm.
-type GzipEncoder struct {
+type GzipEncoding struct {
 	Level int
 }
 
-// NewGzipEncoder creates a new content encoder with the default compression
+// NewGzipEncoding creates a new content encoding with the default compression
 // level.
-func NewGzipEncoder() *GzipEncoder {
-	return NewGzipEncoderLevel(gzip.DefaultCompression)
+func NewGzipEncoding() *GzipEncoding {
+	return NewGzipEncodingLevel(gzip.DefaultCompression)
 }
 
-// NewGzipEncoderLevel creates a new content encoder with the given
+// NewGzipEncodingLevel creates a new content encoding with the given
 // compression level.
-func NewGzipEncoderLevel(level int) *GzipEncoder {
-	return &GzipEncoder{
+func NewGzipEncodingLevel(level int) *GzipEncoding {
+	return &GzipEncoding{
 		Level: level,
 	}
 }
 
-// Coding satsifies ContentEncoder.
-func (e *GzipEncoder) Coding() string {
+// Coding satsifies the ContentEncoding interface.
+func (e *GzipEncoding) Coding() string {
 	return "gzip"
 }
 
-// NewWriter satsifies ContentEncoder.
-func (e *GzipEncoder) NewWriter(w io.Writer) io.WriteCloser {
-	z, err := gzip.NewWriterLevel(w, e.Level)
-	if err != nil {
-		panic(err)
-	}
-	return z
+// NewReader satisfies the ContentEncoding interface.
+func (e *GzipEncoding) NewReader(r io.Reader) (io.ReadCloser, error) {
+	return gzip.NewReader(r)
 }
 
-// ZlibEncoder implements the ContentEncoder interface for the zlib
+// NewWriter satsifies the ContentEncoding interface.
+func (e *GzipEncoding) NewWriter(w io.Writer) (io.WriteCloser, error) {
+	return gzip.NewWriterLevel(w, e.Level)
+}
+
+// ZlibEncoding implements the ContentEncoding interface for the zlib
 // algorithm.
-type ZlibEncoder struct {
+type ZlibEncoding struct {
 	Level int
 }
 
-// NewZlibEncoder creates a new content encoder with the default compression
+// NewZlibEncoding creates a new content encoding with the default compression
 // level.
-func NewZlibEncoder() *ZlibEncoder {
-	return NewZlibEncoderLevel(zlib.DefaultCompression)
+func NewZlibEncoding() *ZlibEncoding {
+	return NewZlibEncodingLevel(zlib.DefaultCompression)
 }
 
-// NewZlibEncoderLevel creates a new content encoder with the given
+// NewZlibEncodingLevel creates a new content encoding with the given
 // compression level.
-func NewZlibEncoderLevel(level int) *ZlibEncoder {
-	return &ZlibEncoder{
+func NewZlibEncodingLevel(level int) *ZlibEncoding {
+	return &ZlibEncoding{
 		Level: level,
 	}
 }
 
-// Coding satsifies ContentEncoder.
-func (e *ZlibEncoder) Coding() string {
+// Coding satsifies the ContentEncoding interface.
+func (e *ZlibEncoding) Coding() string {
 	return "zlib"
 }
 
-// NewWriter satsifies ContentEncoder.
-func (e *ZlibEncoder) NewWriter(w io.Writer) io.WriteCloser {
-	z, err := zlib.NewWriterLevel(w, e.Level)
-	if err != nil {
-		panic(err)
-	}
-	return z
+// NewReader satisfies the ContentEncoding interface.
+func (e *ZlibEncoding) NewReader(r io.Reader) (io.ReadCloser, error) {
+	return zlib.NewReader(r)
+}
+
+// NewWriter satsifies the ContentEncoding interface.
+func (e *ZlibEncoding) NewWriter(w io.Writer) (io.WriteCloser, error) {
+	return zlib.NewWriterLevel(w, e.Level)
 }

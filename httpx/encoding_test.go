@@ -38,11 +38,7 @@ func TestEncodingHandler(t *testing.T) {
 
 	h := NewEncodingHandler(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte("Hello World!"))
-	}),
-		NewDeflateEncoder(),
-		NewGzipEncoder(),
-		NewZlibEncoder(),
-	)
+	}))
 
 	for _, test := range tests {
 		t.Run(test.coding, func(t *testing.T) {
@@ -65,6 +61,42 @@ func TestEncodingHandler(t *testing.T) {
 			}
 			if s := string(b); s != "Hello World!" {
 				t.Error("bad content:", s)
+			}
+		})
+	}
+}
+
+func TestEncodingTransport(t *testing.T) {
+	tests := []struct {
+		encoding ContentEncoding
+	}{
+		{NewDeflateEncoding()},
+		{NewGzipEncoding()},
+		{NewZlibEncoding()},
+	}
+
+	for _, test := range tests {
+		t.Run(test.encoding.Coding(), func(t *testing.T) {
+			server := httptest.NewServer(NewEncodingHandler(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+				res.Write([]byte("Hello World!"))
+			})))
+			defer server.Close()
+
+			client := http.Client{
+				Transport: NewEncodingTransport(http.DefaultTransport, test.encoding),
+			}
+
+			res, err := client.Get(server.URL + "/")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			b, _ := ioutil.ReadAll(res.Body)
+			res.Body.Close()
+
+			if s := string(b); s != "Hello World!" {
+				t.Error(s)
 			}
 		})
 	}
