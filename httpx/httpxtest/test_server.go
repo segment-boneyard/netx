@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/segmentio/netx"
 )
 
 // ServerConfig is used to configure the HTTP server started by MakeServer.
@@ -238,11 +236,11 @@ func testServerReadTimeout(t *testing.T, f MakeServer) {
 // test that the server properly closes connections when the client doesn't read
 // the response.
 func testServerWriteTimeout(t *testing.T, f MakeServer) {
-	b := make([]byte, 1<<22) // 4MB
+	b := make([]byte, 10*(1<<22)) // 40MB
 
 	url, close := f(ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			if _, err := w.Write(b); !netx.IsTimeout(err) {
+			if _, err := w.Write(b); err == nil {
 				t.Error(err)
 			}
 		}),
