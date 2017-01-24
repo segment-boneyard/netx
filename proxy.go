@@ -81,31 +81,26 @@ func OriginalTargetAddr(conn net.Conn) (net.Addr, error) {
 // ProxyProtocol is the implementation of a connection handler which speaks
 // the proxy protocol.
 //
-// When the handler receives a LOCAL connection it attempts to protomote its
-// handler to a Handler to serve it the connection. If this doesn't work the
-// connection is simply closed.
+// When the handler receives a LOCAL connection it handles the connection itself
+// and simply closes the connection.
 //
 // Version 1 and 2 are supported.
 //
 // http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt
 type ProxyProtocol struct {
-	Handler ProxyHandler
+	Handler Handler
 }
 
 // ServeConn satisifies the Handler interface.
 func (p *ProxyProtocol) ServeConn(ctx context.Context, conn net.Conn) {
-	src, dst, buf, local, err := parseProxyProto(conn)
+	src, _, buf, local, err := parseProxyProto(conn)
 
 	if err != nil {
 		panic(err)
 	}
 
 	if local {
-		if h, ok := p.Handler.(Handler); ok {
-			h.ServeConn(ctx, conn)
-		} else {
-			conn.Close()
-		}
+		conn.Close()
 		return
 	}
 
@@ -114,7 +109,7 @@ func (p *ProxyProtocol) ServeConn(ctx context.Context, conn net.Conn) {
 		src:  src,
 		buf:  buf,
 	}
-	p.Handler.ServeProxy(ctx, proxyConn, dst)
+	p.Handler.ServeConn(ctx, proxyConn)
 }
 
 type proxyProtoConn struct {
