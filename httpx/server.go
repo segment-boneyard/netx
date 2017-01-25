@@ -310,6 +310,7 @@ func (res *responseWriter) Hijack() (conn net.Conn, rw *bufio.ReadWriter, err er
 
 	conn, rw = res.conn.c.Conn, bufio.NewReadWriter(&res.conn.Reader, &res.conn.Writer)
 	res.conn = nil
+	res.status = http.StatusSwitchingProtocols
 	res.err = http.ErrHijacked
 
 	// Cancel all deadlines on the connection before returning it.
