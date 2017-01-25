@@ -1,15 +1,16 @@
 package httpx
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/segmentio/netx"
@@ -94,6 +95,7 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch method := req.Method; method {
 	case http.MethodConnect:
 		p.serveCONNECT(w, &outreq)
+		return
 	case http.MethodTrace, http.MethodOptions:
 		// Decrement the Max-Forward header for TRACE and OPTIONS requests.
 		max, err := maxForwards(outreq.Header)
@@ -128,7 +130,6 @@ func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 
 	res, err := transport.RoundTrip(req)
 	if err != nil {
-		fmt.Println("bad gateway:", err)
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
@@ -145,29 +146,62 @@ func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *ReverseProxy) serveCONNECT(w http.ResponseWriter, req *http.Request) {
-	tunnel := &netx.Tunnel{
-		Handler:     netx.TunnelRaw,
-		DialContext: p.DialContext,
+	w.WriteHeader(http.StatusOK)
+
+	dial := p.DialContext
+	if dial == nil {
+		dial = (&net.Dialer{Timeout: 10 * time.Second}).DialContext
 	}
+
+	join := &sync.WaitGroup{}
+	defer join.Wait()
+
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+
+	backend, err := dial(ctx, "tcp", req.URL.Host)
+	if err != nil {
+		panic(err)
+	}
+	defer backend.Close()
 
 	io.Copy(ioutil.Discard, req.Body)
 	req.Body.Close()
 
-	conn, rw, err := w.(http.Hijacker).Hijack()
+	frontend, rw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
+	defer frontend.Close()
 
-	if err := rw.Flush(); err != nil {
-		panic(err)
-	}
+	join.Add(1)
+	go func(r *bufio.Reader) {
+		defer join.Done()
+		defer cancel()
+
+		if _, err := r.WriteTo(backend); err != nil {
+			return
+		}
+
+		r = nil
+		netx.Copy(backend, frontend)
+	}(rw.Reader)
+
+	join.Add(1)
+	go func(w *bufio.Writer) {
+		defer join.Done()
+		defer cancel()
+
+		if err := w.Flush(); err != nil {
+			return
+		}
+
+		w = nil
+		netx.Copy(frontend, backend)
+	}(rw.Writer)
 
 	rw = nil
-	tunnel.ServeProxy(req.Context(), conn, &netx.NetAddr{
-		Net:  "tcp",
-		Addr: req.URL.Host,
-	})
+	<-ctx.Done()
 }
 
 func (p *ReverseProxy) serveOPTIONS(w http.ResponseWriter, req *http.Request) {
