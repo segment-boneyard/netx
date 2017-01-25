@@ -25,14 +25,6 @@ type ContentEncoding interface {
 	NewWriter(w io.Writer) (io.WriteCloser, error)
 }
 
-// DefaultEncodings is the list of encodings supported by the encoding handler
-// and transports by default.
-var DefaultEncodings = []ContentEncoding{
-	NewGzipEncoding(),
-	NewZlibEncoding(),
-	NewDeflateEncoding(),
-}
-
 // NewEncodingTransport wraps transport to support decoding the responses with
 // specified content encodings.
 //
@@ -40,7 +32,7 @@ var DefaultEncodings = []ContentEncoding{
 // uses DefaultEncodings.
 func NewEncodingTransport(transport http.RoundTripper, contentEncodings ...ContentEncoding) http.RoundTripper {
 	if contentEncodings == nil {
-		contentEncodings = DefaultEncodings
+		contentEncodings = defaultEncodings()
 	}
 
 	encodings := make(map[string]ContentEncoding, len(contentEncodings))
@@ -105,7 +97,7 @@ func (r *contentEncodingReader) Close() error {
 // uses DefaultEncodings.
 func NewEncodingHandler(handler http.Handler, contentEncodings ...ContentEncoding) http.Handler {
 	if contentEncodings == nil {
-		contentEncodings = DefaultEncodings
+		contentEncodings = defaultEncodings()
 	}
 
 	encodings := make(map[string]ContentEncoding, len(contentEncodings))
@@ -248,4 +240,12 @@ func (e *ZlibEncoding) NewReader(r io.Reader) (io.ReadCloser, error) {
 // NewWriter satsifies the ContentEncoding interface.
 func (e *ZlibEncoding) NewWriter(w io.Writer) (io.WriteCloser, error) {
 	return zlib.NewWriterLevel(w, e.Level)
+}
+
+func defaultEncodings() []ContentEncoding {
+	return []ContentEncoding{
+		NewGzipEncoding(),
+		NewZlibEncoding(),
+		NewDeflateEncoding(),
+	}
 }

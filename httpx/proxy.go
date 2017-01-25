@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -40,7 +41,8 @@ type ReverseProxy struct {
 	// http.DefaultTransport is used instead.
 	Transport http.RoundTripper
 
-	// DialContext is used for dialing new TCP connections on HTTP upgrades.
+	// DialContext is used for dialing new TCP connections on HTTP upgrades or
+	// CONNECT requests.
 	DialContext func(context.Context, string, string) (net.Conn, error)
 
 	// TLSClientConfig specifies the TLS configuration to use for HTTP upgrades
@@ -89,11 +91,14 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	addForwarded(outreq.Header, outreq.URL.Scheme, remoteAddr, localAddr)
 	addVia(outreq.Header, protoVersion(req), localAddr)
 
-	// Decrement the Max-Forward header for TRACE and OPTIONS requests.
-	if method := req.Method; method == "TRACE" || method == "OPTIONS" {
+	switch method := req.Method; method {
+	case http.MethodConnect:
+		p.serveCONNECT(w, &outreq)
+	case http.MethodTrace, http.MethodOptions:
+		// Decrement the Max-Forward header for TRACE and OPTIONS requests.
 		max, err := maxForwards(outreq.Header)
 		if max--; max == 0 || err != nil {
-			if method == "TRACE" {
+			if method == http.MethodTrace {
 				p.serveTRACE(w, &outreq)
 			} else {
 				p.serveOPTIONS(w, &outreq)
@@ -137,6 +142,32 @@ func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 
 	deleteHopFields(res.Trailer)
 	copyHeader(w.Header(), res.Trailer)
+}
+
+func (p *ReverseProxy) serveCONNECT(w http.ResponseWriter, req *http.Request) {
+	tunnel := &netx.Tunnel{
+		Handler:     netx.TunnelRaw,
+		DialContext: p.DialContext,
+	}
+
+	io.Copy(ioutil.Discard, req.Body)
+	req.Body.Close()
+
+	conn, rw, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	if err := rw.Flush(); err != nil {
+		panic(err)
+	}
+
+	rw = nil
+	tunnel.ServeProxy(req.Context(), conn, &netx.NetAddr{
+		Net:  "tcp",
+		Addr: req.URL.Host,
+	})
 }
 
 func (p *ReverseProxy) serveOPTIONS(w http.ResponseWriter, req *http.Request) {
