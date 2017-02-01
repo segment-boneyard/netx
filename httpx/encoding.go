@@ -53,8 +53,12 @@ func NewEncodingTransport(transport http.RoundTripper, contentEncodings ...Conte
 			return
 		}
 
-		if coding := res.Header.Get("Content-Encoding"); len(coding) != 0 {
-			if encoding := encodings[coding]; encoding != nil {
+		coding := res.Header["Content-Encoding"]
+
+		if len(coding) != 0 {
+			encoding := encodings[coding[0]]
+
+			if encoding != nil {
 				var decoder io.ReadCloser
 
 				if decoder, err = encoding.NewReader(res.Body); err != nil {
@@ -62,11 +66,13 @@ func NewEncodingTransport(transport http.RoundTripper, contentEncodings ...Conte
 					return
 				}
 
+				req.ContentLength = -1
 				res.Body = &contentEncodingReader{
 					decoder: decoder,
 					body:    res.Body,
 				}
 
+				delete(res.Header, "Content-Length")
 				delete(res.Header, "Content-Encoding")
 			}
 		}
@@ -110,17 +116,22 @@ func NewEncodingHandler(handler http.Handler, contentEncodings ...ContentEncodin
 	}
 
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
-		coding := NegotiateEncoding(req.Header.Get("Accept-Encoding"), codings...)
+		accept := req.Header["Accept-Encoding"]
 
-		if len(coding) != 0 {
-			if w, err := encodings[coding].NewWriter(res); err == nil {
-				defer w.Close()
+		if len(accept) != 0 {
+			coding := NegotiateEncoding(accept[0], codings...)
 
-				h := res.Header()
-				h.Set("Content-Encoding", coding)
+			if len(coding) != 0 {
+				if w, err := encodings[coding].NewWriter(res); err == nil {
+					defer w.Close()
 
-				res = &contentEncodingWriter{res, w}
-				delete(req.Header, "Accept-Encoding")
+					h := res.Header()
+					h["Content-Encoding"] = []string{coding}
+					delete(h, "Content-Length")
+
+					res = &contentEncodingWriter{res, w}
+					delete(req.Header, "Accept-Encoding")
+				}
 			}
 		}
 
