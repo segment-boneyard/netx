@@ -186,13 +186,9 @@ func Recover(err interface{}, conn net.Conn, logger *log.Logger) {
 	laddr := conn.LocalAddr()
 	raddr := conn.RemoteAddr()
 
-	if e, ok := err.(error); ok {
-		logf("error serving %s->%s: %v", laddr, raddr, e)
-	} else {
-		buf := make([]byte, 262144)
-		buf = buf[:runtime.Stack(buf, false)]
-		logf("panic serving %s->%s: %v\n%s", laddr, raddr, err, string(buf))
-	}
+	buf := make([]byte, 262144)
+	buf = buf[:runtime.Stack(buf, false)]
+	logf("panic serving %s->%s: %v\n%s", laddr, raddr, err, string(buf))
 }
 
 func logf(logger *log.Logger) func(string, ...interface{}) {
