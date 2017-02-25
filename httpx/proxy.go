@@ -85,6 +85,13 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	copyHeader(outreq.Header, req.Header)
 	deleteHopFields(outreq.Header)
 
+	// There must be host set on the URL otherwise the proxy cannot forward the
+	// request to any backend server.
+	if len(outreq.URL.Host) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	// Add proxy headers, Forwarded, Via, and convert X-Forwarded-For.
 	if _, hasFwd := outreq.Header["Forwarded"]; !hasFwd {
 		translateXForwarded(outreq.Header)
@@ -92,7 +99,7 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	addForwarded(outreq.Header, outreq.URL.Scheme, remoteAddr, localAddr)
 	addVia(outreq.Header, protoVersion(req), localAddr)
 
-	switch method := req.Method; method {
+	switch method := outreq.Method; method {
 	case http.MethodConnect:
 		p.serveCONNECT(w, &outreq)
 		return

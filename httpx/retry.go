@@ -3,6 +3,7 @@ package httpx
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -40,13 +41,12 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	req.Body = body
 
 	res := &retryResponseWriter{ResponseWriter: w}
-
 	max := h.MaxAttempts
 	if max == 0 {
 		max = DefaultMaxAttempts
 	}
 
-	for attempt := 0; attempt < max; attempt++ {
+	for attempt := 0; true; {
 		res.status = 0
 		res.header = make(http.Header, 10)
 		res.buffer.Reset()
@@ -69,10 +69,17 @@ func (h *RetryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			break
 		}
 
-		if sleep(req.Context(), backoff(attempt)) != nil {
-			w.WriteHeader(http.StatusServiceUnavailable) // canceled
-			return
+		if attempt++; attempt >= max {
+			break
 		}
+
+		if sleep(req.Context(), backoff(attempt)) != nil {
+			break
+		}
+	}
+
+	if res.status == 0 {
+		res.status = http.StatusServiceUnavailable
 	}
 
 	// 5xx error, write the buffered response to the original writer.
@@ -118,18 +125,25 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (res *http.Response, err e
 		max = DefaultMaxAttempts
 	}
 
-	for attempt := 0; attempt < max; attempt++ {
+	for attempt := 0; true; {
 		if res, err = transport.RoundTrip(req); err == nil {
 			if res.StatusCode < 500 || !isRetriable(res.StatusCode) {
-				break
+				break // success
 			}
 		}
 
 		if body.n != 0 {
+			err = fmt.Errorf("%s %s: failed and cannot be retried because %d bytes of the body have already been sent", req.Method, req.URL.Path, body.n)
 			break
 		}
 
 		if !isIdempotent(req.Method) {
+			err = fmt.Errorf("%s %s: failed and cannot be retried because the method is not idempotent", req.Method, req.URL.Path)
+			break
+		}
+
+		if attempt++; attempt >= max {
+			err = fmt.Errorf("%s %s: failed %d times: %s", req.Method, req.URL.Path, attempt, err)
 			break
 		}
 
