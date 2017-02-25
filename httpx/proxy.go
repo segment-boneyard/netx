@@ -143,8 +143,6 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *ReverseProxy) serveCONNECT(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusOK)
-
 	dial := p.DialContext
 	if dial == nil {
 		dial = (&net.Dialer{Timeout: 10 * time.Second}).DialContext
@@ -158,12 +156,14 @@ func (p *ReverseProxy) serveCONNECT(w http.ResponseWriter, req *http.Request) {
 
 	backend, err := dial(ctx, "tcp", req.URL.Host)
 	if err != nil {
-		panic(err)
+		w.WriteHeader(http.StatusBadGateway)
+		return
 	}
 	defer backend.Close()
 
 	io.Copy(ioutil.Discard, req.Body)
 	req.Body.Close()
+	w.WriteHeader(http.StatusOK)
 
 	frontend, rw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
