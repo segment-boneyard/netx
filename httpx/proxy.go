@@ -117,18 +117,15 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		outreq.Header.Set("Connection", "Upgrade")
 		outreq.Header.Set("Upgrade", upgrade)
 		p.serveUpgrade(w, &outreq)
-	} else {
-		p.serveHTTP(w, &outreq)
+		return
 	}
-}
 
-func (p *ReverseProxy) serveHTTP(w http.ResponseWriter, req *http.Request) {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
 
-	res, err := transport.RoundTrip(req)
+	res, err := transport.RoundTrip(&outreq)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return
